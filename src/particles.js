@@ -133,14 +133,16 @@ export class FX {
     const wy = this.g.terrain.waterY();
     r.m.position.set(pos.x, wy + 0.03, pos.z); r.t = 0; r.dur = dur; r.size = size; r.m.visible = true;
   }
-  ember(pos) {
-    _v.set((Math.random() - 0.5) * 0.4, 1.2 + Math.random() * 1.2, (Math.random() - 0.5) * 0.4);
-    this.glow.spawn(pos, _v, rgb(Math.random() < 0.5 ? 0xff9a30 : 0xffd060), 0.07, 1 + Math.random(), -0.2, 0.6);
+  // indoor: short, low sparks that stay under the roof
+  ember(pos, indoor = false) {
+    _v.set((Math.random() - 0.5) * 0.4, indoor ? 0.4 + Math.random() * 0.4 : 1.2 + Math.random() * 1.2, (Math.random() - 0.5) * 0.4);
+    this.glow.spawn(pos, _v, rgb(Math.random() < 0.5 ? 0xff9a30 : 0xffd060), indoor ? 0.05 : 0.07, indoor ? 0.5 + Math.random() * 0.4 : 1 + Math.random(), -0.2, 0.6);
   }
+  // smoke keeps rising and drifts with the breeze until it fades
   smoke(pos) {
-    _v.set((Math.random() - 0.5) * 0.3, 0.9 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3);
+    _v.set((Math.random() - 0.5) * 0.3 + 0.25, 0.7 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3);
     const l = 0.35 + Math.random() * 0.15;
-    this.solid.spawn(pos, _v, [l, l, l * 1.05], 0.14 + Math.random() * 0.1, 2.2, -0.15, 0.3);
+    this.solid.spawn(pos, _v, [l, l, l * 1.05], 0.14 + Math.random() * 0.1, 2.2, -0.5, 0.15);
   }
   sparkle(pos, hex = 0xfff0b0, n = 10) {
     for (let i = 0; i < n; i++) {

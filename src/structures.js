@@ -299,6 +299,8 @@ export class Structures {
     const pos = new THREE.Vector3(HOUSE.x + 7.35, HOUSE.y + 1.05, HOUSE.z + 3.5);
     const fire = this.makeFlames(pos, 0.7);
     this.fireplace = { pos, fire };
+    // chimney (stage 3 roof): small voxels x 17..18, z 6..7, top at y 20 → world
+    this.chimneyTop = new THREE.Vector3(HOUSE.x + 9, HOUSE.y + 10.6, HOUSE.z + 3.5);
     g.lights.fireplace.position.copy(pos).add(new THREE.Vector3(-0.6, 0.5, 0));
     g.lights.fireplace.userData.base = 10;
   }
@@ -373,8 +375,9 @@ export class Structures {
       u.outer.scale.set(1 + Math.sin(u.phase) * 0.12, 1 + Math.sin(u.phase * 1.7) * 0.25, 1 + Math.cos(u.phase * 1.3) * 0.12);
       u.inner.scale.set(0.6 + Math.sin(u.phase * 2.1) * 0.08, 0.6 + Math.cos(u.phase * 1.4) * 0.15, 0.6);
       u.outer.rotation.y += dt * 0.8;
-      if (Math.random() < dt * 6) g.fx.ember(f.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.4, (Math.random() - 0.5) * 0.3)));
-      if (Math.random() < dt * 3) g.fx.smoke(f.position.clone().add(new THREE.Vector3(0, 0.8, 0)));
+      const indoor = this.fireplace && f === this.fireplace.fire;
+      if (Math.random() < dt * (indoor ? 3 : 6)) g.fx.ember(f.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3)), indoor);
+      if (Math.random() < dt * 3) g.fx.smoke(indoor ? this.chimneyTop : f.position.clone().add(new THREE.Vector3(0, 0.8, 0)));
     }
     // Mabel looks at the player and bobs gently
     if (this.npc) {
