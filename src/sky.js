@@ -120,7 +120,7 @@ export class Sky {
 
     this.hemi.color.copy(this.top).lerp(this.horizon, 0.3 + duskF * 0.45).lerp(_c2.setHex(0xffffff), 0.25);
     this.hemi.groundColor.setHex(this.pal.snow ? 0x8a8f9a : 0x6a5236).lerp(golden, duskF * 0.35).lerp(this.horizon, 0.15);
-    this.hemi.intensity = 0.55 + 0.75 * dayF + duskF * 0.35 + (this.pal.snow ? 0.1 : 0);
+    this.hemi.intensity = 0.6 + 1.05 * dayF + duskF * 0.35 + (this.pal.snow ? 0.1 : 0);
     this.dayLight = 0.22 + 0.78 * dayF;
 
     const fog = this.g.scene.fog;

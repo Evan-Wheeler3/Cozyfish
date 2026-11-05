@@ -32,7 +32,19 @@ const VIEWS = {
   hill:   { p: [CENTER + 44, 24, CENTER + 18], t: [CENTER - 30, 8, CENTER + 6] },
   low:    { p: [CENTER + 14, 9.3, CENTER + 14], t: [CENTER - 20, 11, CENTER - 20] },
 };
-const v = VIEWS[view];
+const v = VIEWS[view] || {};
+if (view === 'forest' || view === 'forest2') {
+  // eye level, deep in the woods, in a spot with no trunk right next to the camera
+  const ang = view === 'forest' ? 2.3 : 4.1;
+  for (let r = 44; r > 30; r -= 0.5) {
+    const x = Math.floor(CENTER + Math.cos(ang) * r), z = Math.floor(CENTER + Math.sin(ang) * r);
+    if (game.forest.near(x + 0.5, z + 0.5, 1.6).length) continue;
+    const y = game.terrain.H(x, z) + 1.6;
+    v.p = [x + 0.5, y, z + 0.5];
+    v.t = [x + 0.5 + Math.cos(ang + 2.6) * 20, y + 0.6, z + 0.5 + Math.sin(ang + 2.6) * 20];
+    break;
+  }
+}
 if (view === 'woods') { const cx = 66, cz = 41; v.p = [cx, game.terrain.H(cx, cz) + 1.6, cz]; v.t = [cx - 12, game.terrain.H(cx, cz) + 2, cz - 6]; }
 camera.position.set(...v.p); camera.lookAt(...v.t);
 const post = new Post(renderer, scene, camera, game.sky);

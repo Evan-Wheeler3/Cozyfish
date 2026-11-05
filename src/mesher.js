@@ -42,6 +42,7 @@ export class VoxelMesher {
   constructor(s = 1, ox = 0, oy = 0, oz = 0) {
     this.s = s; this.ox = ox; this.oy = oy; this.oz = oz;
     this.pos = []; this.nor = []; this.col = []; this.idx = []; this.vc = 0;
+    this.tags = []; this.tag = 0; this.useTags = false;
     this.capFrac = 0.3;
   }
 
@@ -83,6 +84,7 @@ export class VoxelMesher {
       this.nor.push(n[0], n[1], n[2]);
       const l = ao[k];
       this.col.push(r * l, g * l, b * l);
+      this.tags.push(this.tag);
     }
     if (flip) this.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
     else this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -94,6 +96,7 @@ export class VoxelMesher {
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    if (this.useTags) g.setAttribute('aLeaf', new THREE.Float32BufferAttribute(this.tags, 1));
     g.setIndex(this.vc > 65535 ? new THREE.Uint32BufferAttribute(this.idx, 1) : new THREE.Uint16BufferAttribute(this.idx, 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();
@@ -105,7 +108,7 @@ export class VoxelMesher {
 export class VoxelModel {
   constructor() { this.map = new Map(); }
   static key(x, y, z) { return ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512); }
-  set(x, y, z, hex) { this.map.set(VoxelModel.key(x, y, z), [x, y, z, hex]); return this; }
+  set(x, y, z, hex, tag = 0) { this.map.set(VoxelModel.key(x, y, z), [x, y, z, hex, tag]); if (tag) this.tagged = true; return this; }
   del(x, y, z) { this.map.delete(VoxelModel.key(x, y, z)); }
   has(x, y, z) { return this.map.has(VoxelModel.key(x, y, z)); }
   get(x, y, z) { return this.map.get(VoxelModel.key(x, y, z)); }
@@ -121,9 +124,11 @@ export class VoxelModel {
   build(s = 1, ox = 0, oy = 0, oz = 0, jitter = 0.08, seed = 1) {
     const m = new VoxelMesher(s, ox, oy, oz);
     const solid = (x, y, z) => this.has(x, y, z);
-    for (const [x, y, z, hex] of this.map.values()) {
+    m.useTags = !!this.tagged;
+    for (const [x, y, z, hex, tag] of this.map.values()) {
       const c = Array.isArray(hex) ? hex : lin(hex);
       const j = 1 + (hash3(x, y, z, seed) - 0.5) * jitter * 2;
+      m.tag = tag || 0;
       m.add(x, y, z, c[0] * j, c[1] * j, c[2] * j, solid);
     }
     return m.geometry();
@@ -142,14 +147,15 @@ export const SHARED = {
 // Voxel material with: pixel-grain texel detail, sun-scattering haze and
 // optional wind sway (leaves / grass). Clean "Minecraft shaders" vibe.
 export function voxMat(opts = {}) {
-  const { vertexColors = true, texels = 8, amount = 0.2, sway = 0, swayFrom = 2, swayTo = 6, roughness = 0.92 } = opts;
+  const { vertexColors = true, texels = 8, amount = 0.2, sway = 0, swayFrom = 2, swayTo = 6, roughness = 0.92, dither = false } = opts;
   const mat = new THREE.MeshStandardMaterial({ vertexColors, roughness, metalness: 0 });
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, SHARED);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         uniform float uTime; uniform float uWind;
-        varying vec3 vGrainW; varying vec3 vGrainN; varying vec3 vHazeView;`)
+        varying vec3 vGrainW; varying vec3 vGrainN; varying vec3 vHazeView;
+        ${dither ? 'attribute float aLeaf; varying float vLeaf;' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         ${sway > 0 ? `{
           vec4 sw = vec4(transformed, 1.0);
@@ -169,12 +175,22 @@ export function voxMat(opts = {}) {
           gW = instanceMatrix * gW; gN = mat3(instanceMatrix) * gN;
         #endif
         vGrainW = (modelMatrix * gW).xyz; vGrainN = normalize(mat3(modelMatrix) * gN);
-        vHazeView = mvPosition.xyz;`);
+        vHazeView = mvPosition.xyz;
+        ${dither ? 'vLeaf = aLeaf;' : ''}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform vec3 uSunView; uniform vec3 uSunFog; uniform float uScatter;
         varying vec3 vGrainW; varying vec3 vGrainN; varying vec3 vHazeView;
-        float gHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }`)
+        float gHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        ${dither ? `varying float vLeaf;
+        float bayer4(vec2 p){ ivec2 i = ivec2(mod(p, 4.0));
+          int b[16] = int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+          return (float(b[i.y * 4 + i.x]) + 0.5) / 16.0; }` : ''}`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        ${dither ? `if (vLeaf > 0.5) {
+          float fade = smoothstep(1.4, 4.2, length(vHazeView));
+          if (fade < bayer4(gl_FragCoord.xy)) discard;
+        }` : ''}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
           vec3 gp = floor(vGrainW * ${texels.toFixed(1)} - vGrainN * 0.02);
@@ -190,14 +206,14 @@ export function voxMat(opts = {}) {
           gl_FragColor.rgb = mix(gl_FragColor.rgb, hz, hazeF);
         #endif`);
   };
-  mat.customProgramCacheKey = () => ['vox', vertexColors, texels, amount, sway, swayFrom, swayTo].join('|');
+  mat.customProgramCacheKey = () => ['vox', vertexColors, texels, amount, sway, swayFrom, swayTo, dither].join('|');
   return mat;
 }
 
 export const MAT = {
   vox: voxMat(),
   inst: voxMat({ vertexColors: false, roughness: 0.88 }),
-  tree: voxMat({ sway: 0.07, swayFrom: 2.5, swayTo: 9 }),
+  tree: voxMat({ sway: 0.07, swayFrom: 2.5, swayTo: 9, dither: true }),
   plant: voxMat({ sway: 0.06, swayFrom: 0.05, swayTo: 0.9 }),
 };
 

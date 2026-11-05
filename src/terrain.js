@@ -172,8 +172,8 @@ export class Terrain {
       c = [g1[0] + (g2[0] - g1[0]) * t, g1[1] + (g2[1] - g1[1]) * t, g1[2] + (g2[2] - g1[2]) * t];
       const f = this.forest[i];
       if (f > 0) { // mossy forest floor with leaf litter
-        const lit = lin(pal.key === 'fall' ? 0xa0602c : 0x5a6a2e);
-        const ft = f * (0.35 + 0.3 * hash2(x, z, 5));
+        const lit = lin(pal.key === 'fall' ? 0xb0703a : 0x7a8a3e);
+        const ft = f * (0.25 + 0.25 * hash2(x, z, 5));
         c = [c[0] + (lit[0] - c[0]) * ft, c[1] + (lit[1] - c[1]) * ft, c[2] + (lit[2] - c[2]) * ft];
       }
     }

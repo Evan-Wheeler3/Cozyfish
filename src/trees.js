@@ -6,17 +6,20 @@ import { VoxelModel, MAT, lin } from './mesher.js';
 import { K } from './terrain.js';
 
 const S = 0.5; // tree voxel size
+// size = trunk height in blocks. low: canopy may reach down near eye level
+// (one bushy variant per type); everything else keeps leaves above head height.
 const VARIANTS = [
-  { type: 'oak', size: 4, leaf: 0, seed: 11 },
-  { type: 'oak', size: 5, leaf: 1, seed: 12 },
-  { type: 'oak', size: 4, leaf: 2, seed: 13 },
-  { type: 'pine', size: 7, seed: 21 },
-  { type: 'pine', size: 9, seed: 22 },
-  { type: 'pine', size: 6, seed: 23 },
-  { type: 'birch', size: 5, seed: 31 },
-  { type: 'birch', size: 6, seed: 32 },
+  { type: 'oak', size: 6, leaf: 0, seed: 11 },
+  { type: 'oak', size: 7, leaf: 1, seed: 12 },
+  { type: 'oak', size: 4, leaf: 2, seed: 13, low: true },
+  { type: 'pine', size: 9, seed: 21 },
+  { type: 'pine', size: 11, seed: 22 },
+  { type: 'pine', size: 6, seed: 23, low: true },
+  { type: 'birch', size: 7, seed: 31 },
+  { type: 'birch', size: 8, seed: 32 },
 ];
-const LOGS = { oak: 3, pine: 4, birch: 3 };
+const LEAF_MIN = 6; // lowest leaf voxel (0.5 units) for tall trees → 3 blocks up
+const LOGS = { oak: 4, pine: 5, birch: 4 };
 
 function buildTree(v, pal) {
   const m = new VoxelModel();
@@ -41,7 +44,7 @@ function buildTree(v, pal) {
     const nb = winterBare ? 5 : 3;
     for (let b = 0; b < nb; b++) {
       const a = rnd() * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a);
-      const y0 = Math.floor(th * (0.55 + rnd() * 0.4)), len = 3 + Math.floor(rnd() * 3);
+      const y0 = Math.floor(th * (v.low ? 0.55 : 0.68) + rnd() * th * 0.3), len = 3 + Math.floor(rnd() * 3);
       for (let k = 1; k <= len; k++) {
         const x = Math.round(dx * k - 0.5), z = Math.round(dz * k - 0.5), y = y0 + Math.round(k * 0.7);
         m.set(x, y, z, bark);
@@ -60,11 +63,11 @@ function buildTree(v, pal) {
         if (r > 0.82) return [1.0 * 0.95, 0.93, 0.95];
         if (r < 0.12) return lin(0x86c95c).map(c => c * k);
       }
-      if (pal.key === 'fall' && r > 0.9) return lin(0xc94a28).map(c => c * k);
+      if (pal.key === 'fall' && v.type !== 'pine' && r > 0.9) return lin(0xc94a28).map(c => c * k);
       return [L[0] * k, L[1] * k, L[2] * k];
     };
     if (v.type === 'pine') {
-      const maxR = 3.4 + v.size * 0.28, bottom = 4, top = th + 4;
+      const maxR = 3.2 + v.size * 0.22, bottom = v.low ? 4 : Math.max(LEAF_MIN, Math.round(th * 0.42)), top = th + 4;
       for (let y = bottom; y <= top; y++) {
         const f = (y - bottom) / (top - bottom);
         let R = (1 - f) * maxR + 0.6;
@@ -74,18 +77,18 @@ function buildTree(v, pal) {
           const d = Math.hypot(x + 0.5, z + 0.5);
           if (d > R + (hash3(x, y, z, v.seed) - 0.5) * 0.8) continue;
           if (m.has(x, y, z)) continue;
-          m.set(x, y, z, leafCol(x, y, z, top, top - bottom));
+          m.set(x, y, z, leafCol(x, y, z, top, top - bottom), 1);
         }
       }
       if (pal.snow) {
         for (const vx of [...m.values()]) {
           const [x, y, z] = vx;
-          if (y >= bottom && !m.has(x, y + 1, z) && hash3(x, y, z, 3) > 0.15) m.set(x, y, z, [0.93, 0.96, 1.0]);
+          if (y >= bottom && !m.has(x, y + 1, z) && hash3(x, y, z, 3) > 0.15) m.set(x, y, z, [0.93, 0.96, 1.0], 1);
         }
       }
     } else {
-      const cy = v.type === 'oak' ? th + 2 : th + 1;
-      const rx = v.type === 'oak' ? 4.6 + v.size * 0.25 : 3.4, ry = v.type === 'oak' ? 3.8 : 4.4;
+      const cy = v.type === 'oak' ? th + 1 : th;
+      const rx = v.type === 'oak' ? 4.4 + v.size * 0.3 : 3.4, ry = v.type === 'oak' ? 3.8 + (v.low ? 0 : 0.6) : 4.8;
       const R = Math.ceil(Math.max(rx, ry)) + 1;
       // two or three overlapping blobs for a natural silhouette
       const blobs = [[0, 0, 0, 1]];
@@ -97,7 +100,8 @@ function buildTree(v, pal) {
           if (dx * dx + dy * dy + dz * dz < 1 - (hash3(x, y, z, v.seed + 1) * 0.35)) { inside = true; break; }
         }
         if (!inside || m.has(x, y, z)) continue;
-        m.set(x, y, z, leafCol(x, y, z, cy, ry));
+        if (!v.low && y < LEAF_MIN) continue;
+        m.set(x, y, z, leafCol(x, y, z, cy, ry), 1);
       }
     }
   } else if (pal.snow) {
@@ -150,14 +154,16 @@ export class Forest {
       const x = Math.floor(gx + rnd() * SP * 0.8), z = Math.floor(gz + rnd() * SP * 0.8);
       if (x < 1 || z < 1 || x >= N - 1 || z >= N - 1) continue;
       const f = t.forest[z * N + x];
-      const p = f > 0 ? 0.12 + f * 0.8 : 0.03;
+      const p = f > 0 ? 0.1 + f * 0.62 : 0.03;
       if (rnd() > p) continue;
       if (this.blocked(x, z)) continue;
       const n = valueNoise(x * 0.05, z * 0.05, 41) + (rnd() - 0.5) * 0.35;
       const dc = Math.hypot(x - CENTER, z - CENTER);
       let type = n < 0.42 ? 'pine' : n < 0.72 ? 'oak' : 'birch';
       if (dc > 62 && rnd() < 0.6) type = 'pine';
-      const opts = VARIANTS.map((v, i) => [v, i]).filter(([v]) => v.type === type);
+      const wantLow = rnd() < 0.2;
+      let opts = VARIANTS.map((v, i) => [v, i]).filter(([v]) => v.type === type && !!v.low === wantLow);
+      if (!opts.length) opts = VARIANTS.map((v, i) => [v, i]).filter(([v]) => v.type === type);
       const [v, vi] = opts[Math.floor(rnd() * opts.length)];
       const y = t.H(x, z);
       const tree = { i: this.trees.length, vi, type, size: v.size, x, z, y, yaw: Math.floor(rnd() * 4) * Math.PI / 2, alive: true, hp: 0, regrowDay: 0, shake: 0 };

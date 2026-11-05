@@ -26,6 +26,7 @@ Preview params: `season` = spring | summer | fall | winter, `time` = hour 0–24
 
 ![Summer sunset](docs/screenshots/summer-17.9-sunset.png)
 ![Golden hour over the pond](docs/screenshots/summer-17.6-hill.png)
+![Walking through the fall woods](docs/screenshots/fall-17.2-forest2.png)
 
 
 | | |
