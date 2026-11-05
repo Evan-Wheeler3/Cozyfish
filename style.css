@@ -277,3 +277,5 @@ img { pointer-events: none; }
 .choice .season { padding: 6px; }
 .choice .nm { font-size: 15px; }
 .choice .bl { font-size: 14px; }
+.version { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); font: 500 12px var(--pixel); color: rgba(255,241,208,.7); text-shadow: 0 1px 3px #000; }
+.ver-line { font: 500 12px var(--pixel); color: var(--ink-soft); margin-top: 12px; text-align: right; }

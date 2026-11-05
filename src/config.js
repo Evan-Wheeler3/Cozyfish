@@ -2,6 +2,9 @@
 //  Cozyfish — game data & tuning
 // ─────────────────────────────────────────────────────────────
 
+// Shown on the title screen and pause menu so you can tell which build is running.
+export const VERSION = 'v0.5 · compass & rest';
+
 export const N = 160;            // world is N × N voxel columns
 export const CENTER = 80;        // pond centre
 export const WATER_Y = 8.7;      // water surface height

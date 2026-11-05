@@ -1,6 +1,6 @@
 // UI: a quiet HUD (hotbar, prompt, contextual meters) and a leather field
 // journal for everything else. All icons are rendered voxel models.
-import { SEASONS, SEASON_ORDER, ITEMS, RECIPES, SHOP, FISH, FISH_BY_ID, RARITY, HOUSE_STAGES, BOAT_NEEDS, RODS, AXES, QUESTS, N, MARKET, HOUSE, CAMP } from './config.js';
+import { VERSION, SEASONS, SEASON_ORDER, ITEMS, RECIPES, SHOP, FISH, FISH_BY_ID, RARITY, HOUSE_STAGES, BOAT_NEEDS, RODS, AXES, QUESTS, N, MARKET, HOUSE, CAMP } from './config.js';
 
 const DIRS = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
 import { Icons } from './icons.js';
@@ -49,6 +49,7 @@ export class UI {
 
   // ─── Title ───
   initTitle(onSelect, touch) {
+    $('version').textContent = VERSION;
     const el = $('season-cards');
     el.innerHTML = SEASON_ORDER.map(k => {
       const s = SEASONS[k];
@@ -424,7 +425,7 @@ export class UI {
         `<button class="season${st.quality === id ? ' sel' : ''}" data-act="quality" data-id="${id}"><div class="nm">${nm}</div><div class="bl">${ds}</div></button>`).join('')}</div>
       <div class="choice two">${[[30, '30 fps', 'Saves battery'], [60, '60 fps', 'Smoothest']].map(([id, nm, ds]) =>
         `<button class="season${st.fps === id ? ' sel' : ''}" data-act="fps" data-id="${id}"><div class="nm">${nm}</div><div class="bl">${ds}</div></button>`).join('')}</div>
-      <div class="pause-buttons"><button class="btn" data-act="resume">Resume</button><button class="btn alt" data-act="journal">Journal</button><button class="btn alt" data-act="save">Save</button><button class="btn warn" data-act="title">Quit to title</button></div></div>`;
+      <div class="pause-buttons"><button class="btn" data-act="resume">Resume</button><button class="btn alt" data-act="journal">Journal</button><button class="btn alt" data-act="save">Save</button><button class="btn warn" data-act="title">Quit to title</button></div><div class="ver-line">Cozyfish ${VERSION}</div></div>`;
     $('pause').classList.remove('hidden');
   }
 
