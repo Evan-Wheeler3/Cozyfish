@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // Shown on the title screen and pause menu so you can tell which build is running.
-export const VERSION = 'v0.5 · compass & rest';
+export const VERSION = 'v0.6 · smoother frames';
 
 export const N = 160;            // world is N × N voxel columns
 export const CENTER = 80;        // pond centre

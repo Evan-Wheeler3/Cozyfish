@@ -25,9 +25,9 @@ const SAVE_KEY = 'cozyfish-save-v1', SETTINGS_KEY = 'cozyfish-settings-v1';
 const SLOTS = ['hands', 'rod', 'axe', 'stone', 'lantern'];
 // Graphics presets. Phones default to medium @ 30 fps to save battery.
 export const QUALITY = {
-  low:    { post: false, rays: false, shadows: false, map: 512,  shadowEvery: 4, maxDpr: 0.75, weather: 0.35, far: 260 },
-  medium: { post: true,  rays: false, shadows: true,  map: 1024, shadowEvery: 3, maxDpr: 1.0,  weather: 0.6,  far: 300 },
-  high:   { post: true,  rays: true,  shadows: true,  map: 2048, shadowEvery: 1, maxDpr: 1.5,  weather: 1,    far: 700 },
+  low:    { post: false, rays: false, shadows: false, map: 512,  shadowEvery: 1, shadowBox: 32, maxDpr: 0.75, weather: 0.35, far: 260 },
+  medium: { post: true,  rays: false, shadows: true,  map: 1024, shadowEvery: 1, shadowBox: 32, maxDpr: 1.0,  weather: 0.6,  far: 300 },
+  high:   { post: true,  rays: true,  shadows: true,  map: 2048, shadowEvery: 1, shadowBox: 45, maxDpr: 1.5,  weather: 1,    far: 700 },
 };
 const $ = (id) => document.getElementById(id);
 
@@ -171,6 +171,7 @@ class Game {
     if (sp) this.player.spawn(sp[0], sp[1] + 0.05, sp[2], sp[3]);
     else this.player.spawn(SPAWN.x, 9.01, SPAWN.z, 0);
     this.player.vm.visible = true;
+    this.prewarm();
     $('title').classList.add('hidden');
     $('hud').classList.remove('hidden');
     if (this.touchCtl) this.touchCtl.show(true);
@@ -668,6 +669,8 @@ class Game {
       sun.shadow.mapSize.set(q.map, q.map);
       if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     }
+    const sc = sun.shadow.camera;
+    sc.left = sc.bottom = -q.shadowBox; sc.right = sc.top = q.shadowBox; sc.updateProjectionMatrix();
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
     this.camera.far = q.far; this.camera.updateProjectionMatrix();
@@ -699,23 +702,52 @@ class Game {
     if (this.testMode) return;
     requestAnimationFrame(this.tick);
     now = now || performance.now();
+    // Measure the display's refresh interval (60/90/120 Hz) …
+    const raw = now - (this.lastRaf || now);
+    this.lastRaf = now;
+    if (raw > 4 && raw < 60) this.rafEma = this.rafEma ? this.rafEma * 0.95 + raw * 0.05 : raw;
+    const refresh = this.rafEma || 16.67;
+    // … and draw on every Nth refresh, so frames arrive at an even cadence
+    // (skipping "slightly early" frames instead made 30 fps judder).
     const idle = this.mode === 'play' && (this.ui.isOpen() || this.sleeping);
     const cap = idle ? 15 : this.settings.fps;
-    const interval = now - (this.lastFrame || 0);
-    if (interval < 1000 / cap - 3) return;
+    const every = Math.max(1, Math.round(1000 / cap / refresh));
+    this.rafCount = (this.rafCount || 0) + 1;
+    if (this.rafCount < every) return;
+    this.rafCount = 0;
+    const interval = now - (this.lastFrame || now - refresh * every);
     this.lastFrame = now;
-    this.frame(Math.min(0.05, interval / 1000), true);
-    if (!idle && interval < 500) this.adaptResolution(interval, 1000 / cap);
+    this.frame(Math.min(0.05, Math.max(0.001, interval / 1000)), true);
+    if (!idle && interval < 250) this.adaptResolution(interval, refresh * every);
   }
 
+  // Lower the render resolution only when frames are clearly too slow, and
+  // raise it again rarely — every change costs a small hitch.
   adaptResolution(interval, target) {
-    this.frameEma = this.frameEma ? this.frameEma * 0.92 + interval * 0.08 : interval;
+    this.frameEma = this.frameEma ? this.frameEma * 0.95 + interval * 0.05 : target;
     this.dprT = (this.dprT || 0) + interval / 1000;
-    if (this.frameEma > target * 1.3 && this.dprT > 1.5 && this.dpr > 0.55) {
-      this.dprT = 0; this.setDpr(Math.max(0.55, +(this.dpr - 0.1).toFixed(2)));
-    } else if (this.frameEma < target * 1.08 && this.dprT > 8 && this.dpr < this.dprMax) {
-      this.dprT = 0; this.setDpr(Math.min(this.dprMax, +(this.dpr + 0.05).toFixed(2)));
+    if (this.frameEma > target * 1.4 && this.dprT > 3 && this.dpr > 0.6) {
+      this.dprT = 0; this.frameEma = target; this.setDpr(Math.max(0.6, +(this.dpr - 0.15).toFixed(2)));
+    } else if (this.frameEma < target * 1.03 && this.dprT > 30 && this.dpr < this.dprMax) {
+      this.dprT = 0; this.setDpr(Math.min(this.dprMax, +(this.dpr + 0.1).toFixed(2)));
     }
+  }
+
+  // Compile every shader up front so the first splash / fire / catch doesn't hitch.
+  prewarm() {
+    const hidden = [this.fishing.bob, this.fishing.line, ...this.fx.ripples.map(r => r.m)];
+    const extras = [];
+    const add = (o) => { o.position.copy(this.player.pos); this.scene.add(o); extras.push(o); };
+    add(this.structures.makeFlames(this.player.pos.clone(), 0.01));
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), MAT.inst, 1);
+    inst.setColorAt(0, new THREE.Color(1, 1, 1)); add(inst);
+    add(new THREE.Mesh(new THREE.CircleGeometry(0.1, 6), new THREE.MeshBasicMaterial({ color: 0x1d3a52 })));
+    const vis = hidden.map(o => o.visible);
+    hidden.forEach(o => (o.visible = true));
+    try { this.renderer.compile(this.scene, this.camera); } catch (e) { /* not critical */ }
+    hidden.forEach((o, i) => (o.visible = vis[i]));
+    for (const o of extras) this.scene.remove(o);
+    this.renderer.shadowMap.needsUpdate = true;
   }
 
   // Deterministic stepping for automated playtests (?test in the URL).
