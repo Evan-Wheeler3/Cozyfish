@@ -256,6 +256,12 @@ export class Structures {
     });
     const maxDelay = Math.max(...data.map(d => d.delay));
     const anim = { mesh, data, t: instant ? 1e9 : 0, dur: maxDelay + 0.7, lastThunk: 0 };
+    // Bounds must come from where the blocks END UP: three.js computes an
+    // instanced mesh's culling sphere once, and the drop animation starts
+    // with every block parked far overhead (which hid the whole stage).
+    this.setHouseMatrices({ ...anim, t: 1e9 });
+    mesh.computeBoundingSphere();
+    mesh.boundingSphere.radius += 6; // room for the drop-in animation
     this.setHouseMatrices(anim);
     g.scene.add(mesh);
     this.houseMeshes.push(mesh);
@@ -280,7 +286,7 @@ export class Structures {
     const m = new THREE.Matrix4();
     a.data.forEach((d, i) => {
       const k = Math.min(1, Math.max(0, (a.t - d.delay) / 0.7));
-      const yOff = k <= 0 ? 1000 : (1 - easeOutBounce(k)) * 5;
+      const yOff = k <= 0 ? 5 : (1 - easeOutBounce(k)) * 5;
       const s = k <= 0 ? 0 : 1;
       m.makeScale(s, s, s).setPosition(d.x, d.y + yOff, d.z);
       a.mesh.setMatrixAt(i, m);
