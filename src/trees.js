@@ -18,6 +18,7 @@ const VARIANTS = [
   { type: 'birch', size: 7, seed: 31 },
   { type: 'birch', size: 8, seed: 32 },
 ];
+const TREE_CHUNK = 40;
 const LEAF_MIN = 6; // lowest leaf voxel (0.5 units) for tall trees → 3 blocks up
 const LOGS = { oak: 4, pine: 5, birch: 4 };
 
@@ -128,8 +129,8 @@ export class Forest {
   constructor(game) {
     this.g = game;
     this.trees = [];
-    this.meshes = [];
     this.falling = [];
+    this.shaking = new Set();
     this.place();
   }
 
@@ -195,38 +196,49 @@ export class Forest {
     return _m.compose(_p, _q, _s);
   }
 
+  // Trees are split into spatial chunks per variant so the GPU only draws
+  // (and shadows) the ones in view.
   build(pal) {
     this.geos = VARIANTS.map(v => buildTree(v, pal));
-    const counts = VARIANTS.map(() => 0);
-    for (const tr of this.trees) tr.inst = counts[tr.vi]++;
-    VARIANTS.forEach((v, vi) => {
-      let mesh = this.meshes[vi];
-      if (mesh) { mesh.geometry.dispose(); mesh.geometry = this.geos[vi]; }
-      else {
-        mesh = new THREE.InstancedMesh(this.geos[vi], MAT.tree, Math.max(1, counts[vi]));
-        mesh.count = counts[vi];
-        mesh.castShadow = true; mesh.receiveShadow = true;
-        this.g.scene.add(mesh);
-        this.meshes[vi] = mesh;
+    if (!this.chunks) {
+      const groups = new Map();
+      for (const tr of this.trees) {
+        const key = tr.vi + ':' + Math.floor(tr.x / TREE_CHUNK) + ':' + Math.floor(tr.z / TREE_CHUNK);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tr);
       }
-    });
-    if (!this.stumps) {
+      this.chunks = [];
+      for (const list of groups.values()) {
+        const vi = list[0].vi;
+        const mesh = new THREE.InstancedMesh(this.geos[vi], MAT.tree, list.length);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        list.forEach((tr, i) => { tr.mesh = mesh; tr.inst = i; });
+        mesh.userData.vi = vi;
+        this.g.scene.add(mesh);
+        this.chunks.push(mesh);
+      }
       this.stumps = new THREE.InstancedMesh(buildStump(), MAT.vox, this.trees.length);
       this.stumps.castShadow = true; this.stumps.receiveShadow = true;
       this.g.scene.add(this.stumps);
+    } else {
+      for (const m of this.chunks) m.geometry = this.geos[m.userData.vi];
+      for (const g of this.oldGeos || []) g.dispose();
     }
+    this.oldGeos = this.geos;
     for (const tr of this.trees) this.syncTree(tr);
-    for (const m of this.meshes) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }
+    for (const m of this.chunks) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); m.boundingSphere.radius += 6; }
     this.stumps.instanceMatrix.needsUpdate = true;
     this.stumps.computeBoundingSphere();
     // falling trees keep their old geometry reference; swap it
     for (const f of this.falling) f.mesh.geometry = this.geos[f.tree.vi];
   }
 
+  hiddenMatrix(tr) { return _m.makeScale(0.0001, 0.0001, 0.0001).setPosition(tr.x + 0.5, tr.y, tr.z + 0.5); }
+
   syncTree(tr) {
-    const mesh = this.meshes[tr.vi];
-    mesh.setMatrixAt(tr.inst, tr.alive ? this.matrixFor(tr) : ZERO);
-    this.stumps.setMatrixAt(tr.i, tr.alive ? ZERO : this.matrixFor(tr));
+    const mesh = tr.mesh;
+    mesh.setMatrixAt(tr.inst, tr.alive ? this.matrixFor(tr) : this.hiddenMatrix(tr));
+    this.stumps.setMatrixAt(tr.i, tr.alive ? this.hiddenMatrix(tr) : this.matrixFor(tr));
     mesh.instanceMatrix.needsUpdate = true;
     this.stumps.instanceMatrix.needsUpdate = true;
   }
@@ -237,6 +249,7 @@ export class Forest {
     if (tr.hp <= 0) tr.hp = power;
     tr.hp -= 1;
     tr.shake = 0.35;
+    this.shaking.add(tr);
     const g = this.g;
     const hp = new THREE.Vector3(tr.x + 0.5, Math.min(from.y, tr.y + 1.6), tr.z + 0.5);
     g.fx.burst(hp, [0xc89a62, 0x8a5a36, 0xe0c08a], 10, 3.5, 0.08);
@@ -269,12 +282,13 @@ export class Forest {
 
   update(dt) {
     const g = this.g;
-    for (const tr of this.trees) {
-      if (tr.shake > 0) {
+    for (const tr of this.shaking) {
+      if (tr.shake <= 0) { this.shaking.delete(tr); continue; }
+      {
         tr.shake = Math.max(0, tr.shake - dt);
         const a = Math.sin(tr.shake * 55) * 0.05 * (tr.shake / 0.35);
-        this.meshes[tr.vi].setMatrixAt(tr.inst, tr.alive ? this.matrixFor(tr, a) : ZERO);
-        this.meshes[tr.vi].instanceMatrix.needsUpdate = true;
+        tr.mesh.setMatrixAt(tr.inst, tr.alive ? this.matrixFor(tr, a) : this.hiddenMatrix(tr));
+        tr.mesh.instanceMatrix.needsUpdate = true;
       }
     }
     const limit = Math.PI / 2 - 0.06;

@@ -23,6 +23,12 @@ import * as M from './models.js';
 
 const SAVE_KEY = 'cozyfish-save-v1', SETTINGS_KEY = 'cozyfish-settings-v1';
 const SLOTS = ['hands', 'rod', 'axe', 'stone', 'lantern'];
+// Graphics presets. Phones default to medium @ 30 fps to save battery.
+export const QUALITY = {
+  low:    { post: false, rays: false, shadows: false, map: 512,  shadowEvery: 4, maxDpr: 0.75, weather: 0.35, far: 260 },
+  medium: { post: true,  rays: false, shadows: true,  map: 1024, shadowEvery: 3, maxDpr: 1.0,  weather: 0.6,  far: 300 },
+  high:   { post: true,  rays: true,  shadows: true,  map: 2048, shadowEvery: 1, maxDpr: 1.5,  weather: 1,    far: 700 },
+};
 const $ = (id) => document.getElementById(id);
 
 function store(key, val) { try { if (val === undefined) return JSON.parse(localStorage.getItem(key)); localStorage.setItem(key, JSON.stringify(val)); } catch (e) { return null; } }
@@ -33,7 +39,7 @@ function newState(season) {
     tools: { rod: 0, axe: 0, lantern: false }, lanternOn: false,
     house: 0, boat: false, campfires: [], cratesOpened: [], chopped: [],
     journal: {}, quest: 0, warmth: 100, wet: 0,
-    stats: { caught: 0, sold: 0, chopped: 0, legendary: 0, bestSkip: 0 },
+    stats: { caught: 0, sold: 0, chopped: 0, legendary: 0, bestSkip: 0, slept: 0 },
     pos: null,
   };
 }
@@ -47,7 +53,8 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 700);
     this.scene.add(this.camera);
-    this.settings = Object.assign({ sens: 1, fov: 72, music: 0.5, sfx: 0.9, fancy: true, shadows: true, invert: false, pinTask: false, minimap: false }, store(SETTINGS_KEY) || {});
+    this.settings = Object.assign({ sens: 1, fov: 72, music: 0.5, sfx: 0.9, invert: false, pinTask: false, minimap: false, compass: true, quality: this.touch ? 'medium' : 'high', fps: this.touch ? 30 : 60 }, store(SETTINGS_KEY) || {});
+    if (!QUALITY[this.settings.quality]) this.settings.quality = 'medium';
     this.saved = store(SAVE_KEY);
     this.season = this.saved ? this.saved.season : 'summer';
     this.palette = SEASONS[this.season];
@@ -88,6 +95,11 @@ class Game {
     this.bindInput();
     this.setupTitle();
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('visibilitychange', () => {
+      // save & go quiet in the background
+      if (document.hidden) { this.saveGame(); if (this.audio.ctx) this.audio.ctx.suspend(); }
+      else { if (this.audio.ctx && this.mode === 'play') this.audio.ctx.resume(); this.lastFrame = performance.now(); }
+    });
     this.tick = this.tick.bind(this);
     this.testMode = /[?&]test/.test(location.search);
     if (this.testMode) this.step(2); else requestAnimationFrame(this.tick);
@@ -594,23 +606,31 @@ class Game {
   }
 
   // ─── Sleep & days ───
-  sleep(where) {
+  // Rest any time: nap until evening, or sleep through to the next morning.
+  sleep(where, until = 'morning') {
     if (this.sleeping) return;
     const h = this.state.time;
-    if (h >= 6 && h < 17) { this.ui.toast('moon', "You're not sleepy yet. Come back after 5 pm."); return; }
+    if (this.ui.isOpen()) this.ui.close();
     this.sleeping = true;
     if (this.fishing.active()) this.fishing.cancel();
     $('fade').classList.add('on');
     this.audio.play('sleep');
-    setTimeout(() => {
-      if (h >= 17) this.newDay();
-      this.state.time = 7;
+    this.state.stats.slept = (this.state.stats.slept || 0) + 1;
+    const wake = () => {
+      if (until === 'evening') this.state.time = 18;
+      else { if (h >= 7) this.newDay(); this.state.time = 7; }
+      // the world catches up while you sleep
+      this.sky.update(0, this.state.time, this.player.pos);
+      this.renderer.shadowMap.needsUpdate = true;
       this.state.warmth = 100; this.state.wet = 0;
       this.saveGame();
       $('fade').classList.remove('on');
       this.sleeping = false;
-      this.ui.banner(`Day ${this.state.day}`, where === 'tent' ? 'The old tent was surprisingly cozy.' : 'Good morning. You slept wonderfully.');
-    }, 1600);
+      const msg = until === 'evening' ? 'You wake to a golden evening. The fish are biting.'
+        : where === 'tent' ? 'The old tent was surprisingly cozy.' : where === 'fire' ? 'You doze off by the crackling fire.' : 'Good morning. You slept wonderfully.';
+      this.ui.banner(until === 'evening' ? 'Evening' : `Day ${this.state.day}`, msg);
+    };
+    if (this.testMode) wake(); else setTimeout(wake, 1600);
   }
 
   newDay() {
@@ -629,13 +649,41 @@ class Game {
     store(SAVE_KEY, s);
   }
 
-  setSetting(k, v) { this.settings[k] = v; store(SETTINGS_KEY, this.settings); this.applySettings(); }
-  applySettings() {
+  setSetting(k, v) {
+    const qualityChanged = k === 'quality' && v !== this.settings.quality;
+    this.settings[k] = v; store(SETTINGS_KEY, this.settings);
+    this.applySettings(qualityChanged);
+  }
+  applySettings(qualityChanged = true) {
     const s = this.settings;
     this.player.sens = 0.0022 * s.sens;
-    this.post.enabled = !!s.fancy;
-    this.sky.sun.castShadow = !!s.shadows;
     this.audio.setVolume('music', s.music); this.audio.setVolume('sfx', s.sfx);
+    if (!qualityChanged) return;
+    const q = this.q = QUALITY[s.quality];
+    this.post.enabled = q.post;
+    this.post.godrays = q.rays;
+    const sun = this.sky.sun;
+    sun.castShadow = q.shadows;
+    if (sun.shadow.mapSize.x !== q.map) {
+      sun.shadow.mapSize.set(q.map, q.map);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.camera.far = q.far; this.camera.updateProjectionMatrix();
+    this.fx.density = q.weather;
+    this.fx.setWeather(this.palette);
+    this.dprMax = Math.min(window.devicePixelRatio || 1, q.maxDpr);
+    this.setDpr(this.dprMax);
+  }
+
+  // Render resolution; lowered automatically if frames run slow.
+  setDpr(v) {
+    this.dpr = v;
+    this.renderer.setPixelRatio(v);
+    this.post.composer.setPixelRatio(v);
+    this.post.setSize(innerWidth, innerHeight);
+    this.fx.resize(innerHeight * v);
   }
 
   resize() {
@@ -645,10 +693,29 @@ class Game {
   }
 
   // ─── Main loop ───
-  tick() {
+  // Frame-rate cap (30/60), slower while menus are open, and adaptive
+  // resolution — smooth play without burning the battery.
+  tick(now) {
     if (this.testMode) return;
     requestAnimationFrame(this.tick);
-    this.frame(Math.min(0.05, this.clock.getDelta()), true);
+    now = now || performance.now();
+    const idle = this.mode === 'play' && (this.ui.isOpen() || this.sleeping);
+    const cap = idle ? 15 : this.settings.fps;
+    const interval = now - (this.lastFrame || 0);
+    if (interval < 1000 / cap - 3) return;
+    this.lastFrame = now;
+    this.frame(Math.min(0.05, interval / 1000), true);
+    if (!idle && interval < 500) this.adaptResolution(interval, 1000 / cap);
+  }
+
+  adaptResolution(interval, target) {
+    this.frameEma = this.frameEma ? this.frameEma * 0.92 + interval * 0.08 : interval;
+    this.dprT = (this.dprT || 0) + interval / 1000;
+    if (this.frameEma > target * 1.3 && this.dprT > 1.5 && this.dpr > 0.55) {
+      this.dprT = 0; this.setDpr(Math.max(0.55, +(this.dpr - 0.1).toFixed(2)));
+    } else if (this.frameEma < target * 1.08 && this.dprT > 8 && this.dpr < this.dprMax) {
+      this.dprT = 0; this.setDpr(Math.min(this.dprMax, +(this.dpr + 0.05).toFixed(2)));
+    }
   }
 
   // Deterministic stepping for automated playtests (?test in the URL).
@@ -694,7 +761,8 @@ class Game {
       } else this.ui.prompt(null);
       if (this.boat) this.boat.update(dt, paused ? null : this.input);
       this.ui.update(dt);
-      $('resume').classList.toggle('hidden', this.touch || this.noLock || this.locked || this.ui.isOpen() || this.sleeping || !this.everLocked);
+      const hideResume = this.touch || this.noLock || this.locked || this.ui.isOpen() || this.sleeping || !this.everLocked;
+      if (hideResume !== this._hideResume) { this._hideResume = hideResume; $('resume').classList.toggle('hidden', hideResume); }
       this.sky.update(dt, s.time, this.player.pos);
     }
     this.forest.update(dt);
@@ -712,7 +780,12 @@ class Game {
       });
       if (this.player.underwater) { const f = this.scene.fog; f.color.setRGB(0.08, 0.25, 0.3); f.near = 0.5; f.far = 16; }
     }
-    if (render) this.post.render();
+    if (render) {
+      // shadows only need refreshing every few frames (the sun moves slowly)
+      this.shadowTick = (this.shadowTick || 0) + 1;
+      if (this.shadowTick % (this.q ? this.q.shadowEvery : 1) === 0) this.renderer.shadowMap.needsUpdate = true;
+      this.post.render();
+    }
   }
 
   updateLights(dt) {

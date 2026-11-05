@@ -158,7 +158,7 @@ export class FX {
       pollen: [0xfff6c8, 0xffffff],
     };
     const cols = palettes[this.kind] || [0xffffff];
-    const count = { snow: 900, petals: 260, leaves: 320, pollen: 160 }[this.kind] || 0;
+    const count = Math.round(({ snow: 900, petals: 260, leaves: 320, pollen: 160 }[this.kind] || 0) * (this.density || 1));
     const p = this.g.camera.position;
     for (let i = 0; i < this.wN; i++) {
       const o = i * 3;
@@ -203,8 +203,7 @@ export class FX {
       // leaves & petals flutter (size flicker reads as tumbling)
       W.size[i] = W.base[i] * ((k === 'leaves' || k === 'petals') ? 0.6 + Math.abs(Math.sin(time * 3 + s)) * 0.5 : 1);
       // hide flakes indoors / underground
-      const fl = g.terrain.floorBelow(W.pos[o], W.pos[o + 1] + 0.5, W.pos[o + 2]);
-      if (W.pos[o + 1] < fl) W.size[i] = 0;
+      if (W.pos[o + 1] < g.terrain.H(W.pos[o], W.pos[o + 2])) W.size[i] = 0;
     }
     W.geo.attributes.position.needsUpdate = true; W.geo.attributes.size.needsUpdate = true; W.geo.attributes.color.needsUpdate = true;
 

@@ -251,3 +251,29 @@ body.touch #fishui { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px)
   .title-buttons { margin-bottom: 8px; }
   .controls-hint { display: none; }
 }
+
+/* compass */
+#compass { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(360px, 56vw); height: 30px; overflow: hidden; background: var(--glass); clip-path: var(--notch);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+#cstrip { position: absolute; inset: 0; }
+#cstrip > * { position: absolute; top: 0; left: 50%; will-change: transform; }
+.cdir { font: 600 15px/30px var(--pixel); color: #fff1d0; width: 30px; margin-left: -15px; text-align: center; }
+.cdir.n { color: #ff8a6a; }
+.cdir.minor { font-size: 11px; color: rgba(255,241,208,.6); }
+.ctick { width: 2px; height: 6px; top: 12px !important; margin-left: -1px; background: rgba(255,241,208,.35); }
+.cmark { width: 22px; height: 22px; margin-left: -11px; top: 4px !important; }
+.cmark img { width: 22px; height: 22px; image-rendering: pixelated; }
+.ctask { width: 30px; margin-left: -15px; text-align: center; }
+.ctask i { display: block; width: 10px; height: 10px; margin: 3px auto 0; background: var(--gold); transform: rotate(45deg); box-shadow: 0 0 0 2px var(--wood-dark); }
+.ctask b { display: block; font: 500 10px/1 var(--pixel); color: var(--gold); margin-top: 3px; }
+.cmid { position: absolute; left: 50%; bottom: 0; width: 2px; height: 5px; margin-left: -1px; background: var(--gold); }
+body.touch #compass { width: min(300px, 46vw); }
+
+/* iOS: never offer "Save image" / drag on game graphics */
+img, canvas, .tbtn, .slot, .islot, #hud, #touch { -webkit-touch-callout: none; -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
+img { pointer-events: none; }
+.choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.choice.two { grid-template-columns: repeat(2, 1fr); margin-bottom: 14px; }
+.choice .season { padding: 6px; }
+.choice .nm { font-size: 15px; }
+.choice .bl { font-size: 14px; }

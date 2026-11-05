@@ -207,7 +207,7 @@ export class Structures {
       g.scene.add(lm);
       this.interactables.push({
         id: 'tent', pos: new THREE.Vector3(CAMP.x - 1.2, cy + 0.8, CAMP.z + 0.5), r: 1.2,
-        label: () => 'Rest in the tent', action: () => g.sleep('tent'),
+        label: () => 'Rest in the tent', action: () => g.ui.openRest('tent'),
       });
     }
 
@@ -227,7 +227,7 @@ export class Structures {
     // house interactables (bed / fireplace appear at stage 4)
     this.interactables.push({
       id: 'bed', pos: new THREE.Vector3(HOUSE.x + 7, 10.5, HOUSE.z + 1.5), r: 1.0, when: () => g.state.house >= 4,
-      label: () => 'Sleep in your bed', action: () => g.sleep('bed'),
+      label: () => 'Sleep in your bed', action: () => g.ui.openRest('bed'),
     });
 
   }
@@ -324,7 +324,7 @@ export class Structures {
     g.scene.add(base);
     const fire = this.makeFlames(pos.clone().add(new THREE.Vector3(0.48, 0.12, 0.48)), 1);
     const cf = { pos: pos.clone().add(new THREE.Vector3(0.5, 0, 0.5)), base, fire };
-    cf.inter = { id: 'campfire', pos: cf.pos.clone().setY(pos.y + 0.4), r: 0.9, label: () => 'Warm up by the fire', action: () => g.ui.toast('flame', 'Toasty. You feel warm and dry.'), passive: true };
+    cf.inter = { id: 'campfire', pos: cf.pos.clone().setY(pos.y + 0.4), r: 0.9, label: () => 'Rest by the fire', action: () => g.ui.openRest('fire') };
     this.interactables.push(cf.inter);
     this.campfires.push(cf);
     if (!restoring) g.state.campfires.push([pos.x, pos.y, pos.z]);

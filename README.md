@@ -38,6 +38,13 @@ Works with mouse & keyboard or touch (phones and tablets, best in landscape).
 | **F** | — | Toggle lantern |
 | **Esc** | **II** button | Menu: season, settings, save |
 
+Rest any time in the old tent, by a campfire, or in your own bed: nap until evening or sleep through to morning.
+A small compass at the top shows the directions, landmarks and where your current task is.
+
+**Battery & smoothness:** the menu has Low / Medium / High graphics and a 30 or 60 fps cap. Phones default to
+Medium at 30 fps. Resolution drops automatically if frames run slow, shadows refresh only every few frames,
+trees outside your view aren't drawn, menus run at a low frame rate, and audio sleeps when the game is in the background.
+
 The HUD stays out of the way: just your hotbar, plus meters that only appear when they matter (warmth, casting,
 line tension). New tasks are announced briefly; turn on *Pin current task* or *Show minimap* in the menu if you
 like them always visible.

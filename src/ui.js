@@ -1,6 +1,8 @@
 // UI: a quiet HUD (hotbar, prompt, contextual meters) and a leather field
 // journal for everything else. All icons are rendered voxel models.
 import { SEASONS, SEASON_ORDER, ITEMS, RECIPES, SHOP, FISH, FISH_BY_ID, RARITY, HOUSE_STAGES, BOAT_NEEDS, RODS, AXES, QUESTS, N, MARKET, HOUSE, CAMP } from './config.js';
+
+const DIRS = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]];
 import { Icons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -114,7 +116,7 @@ export class UI {
     const g = this.g, s = g.state;
     // warmth only when it matters
     const showWarm = s.warmth < 96 || s.wet > 0.05;
-    $('vitals').classList.toggle('hidden', !showWarm);
+    if (this._sw !== showWarm) { this._sw = showWarm; $('vitals').classList.toggle('hidden', !showWarm); }
     if (showWarm) {
       const n = Math.ceil(s.warmth / 10);
       const key = n + (s.warmth < 35 ? 'c' : '');
@@ -125,15 +127,54 @@ export class UI {
         $('warm-pips').innerHTML = Array.from({ length: 10 }, (_, i) => `<i class="${i < n ? '' : 'off'}"></i>`).join('');
       }
     }
-    $('frost').style.opacity = s.warmth < 30 ? (1 - s.warmth / 30) * 0.9 : 0;
-    $('underwater').style.opacity = g.player.underwater ? 1 : 0;
+    const frost = s.warmth < 30 ? ((1 - s.warmth / 30) * 0.9).toFixed(2) : '0';
+    if (frost !== this._frost) { this._frost = frost; $('frost').style.opacity = frost; }
+    const uw = g.player.underwater ? '1' : '0';
+    if (uw !== this._uw) { this._uw = uw; $('underwater').style.opacity = uw; }
     // pinned task (optional)
     const pin = g.settings.pinTask, q = QUESTS[s.quest];
-    $('pinned').classList.toggle('hidden', !pin || !q);
+    if (this._pin !== (pin && !!q)) { this._pin = pin && !!q; $('pinned').classList.toggle('hidden', !this._pin); }
     if (pin && q && this._pq !== s.quest) { this._pq = s.quest; $('pinned').innerHTML = `<div class="t">Task</div><div class="x"></div>`; $('pinned').querySelector('.x').textContent = q.text; }
-    $('mapwrap').classList.toggle('hidden', !g.settings.minimap);
+    if (this._mm !== g.settings.minimap) { this._mm = g.settings.minimap; $('mapwrap').classList.toggle('hidden', !this._mm); }
+    if (this._cp !== g.settings.compass) { this._cp = g.settings.compass; $('compass').classList.toggle('hidden', !this._cp); }
+    if (g.settings.compass) this.compass();
     this.hotbar();
     if (g.settings.minimap) { this.mapT -= dt; if (this.mapT <= 0) { this.mapT = 0.1; this.drawMap($('minimap'), 32); } }
+  }
+
+  // Compass strip: N/E/S/W, landmarks, and the current task's location.
+  compass() {
+    const g = this.g, p = g.player.pos, el = $('cstrip');
+    if (!this.cEls) {
+      const mk = (cls, html = '') => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; el.appendChild(d); return d; };
+      this.cEls = { dirs: DIRS.map(([l, a]) => [mk('cdir' + (l === 'N' ? ' n' : '') + (l.length > 1 ? ' minor' : ''), l), a]), ticks: [] };
+      for (let a = 0; a < 360; a += 15) if (a % 45) this.cEls.ticks.push([mk('ctick'), a]);
+      this.cEls.marks = ['coin', 'house', 'campfire', 'boat'].map(k => mk('cmark', this.ico(k)));
+      this.cEls.task = mk('ctask', '<i></i><b></b>');
+    }
+    const W = el.clientWidth || 300, ppd = W / 180;
+    const heading = -g.player.yaw * 180 / Math.PI;
+    const place = (node, bearing) => {
+      let rel = ((bearing - heading) % 360 + 540) % 360 - 180;
+      const vis = Math.abs(rel) < 92;
+      node.style.display = vis ? '' : 'none';
+      if (vis) node.style.transform = `translateX(${(rel * ppd).toFixed(1)}px)`;
+    };
+    const bearingTo = (x, z) => Math.atan2(x - p.x, -(z - p.z)) * 180 / Math.PI;
+    for (const [n, a] of this.cEls.dirs) place(n, a);
+    for (const [n, a] of this.cEls.ticks) place(n, a);
+    const d = g.terrain.dock;
+    const spots = { market: [MARKET.x + 2.5, MARKET.z + 1], house: [HOUSE.x + 4.5, HOUSE.z + 3.5], camp: [CAMP.x, CAMP.z], dock: [d.x0 + 1, d.z1] };
+    const marks = [spots.market, spots.house, spots.camp, g.boat ? [g.boat.pos.x, g.boat.pos.z] : null];
+    this.cEls.marks.forEach((n, i) => { const m = marks[i]; if (!m || Math.hypot(m[0] - p.x, m[1] - p.z) < 6) n.style.display = 'none'; else place(n, bearingTo(m[0], m[1])); });
+    const q = QUESTS[g.state.quest], t = q && q.at ? spots[q.at] : null;
+    const tn = this.cEls.task;
+    if (t) {
+      const dist = Math.hypot(t[0] - p.x, t[1] - p.z);
+      place(tn, bearingTo(t[0], t[1]));
+      const label = dist < 4 ? 'here' : Math.round(dist) + 'm';
+      if (tn._l !== label) { tn._l = label; tn.querySelector('b').textContent = label; }
+    } else tn.style.display = 'none';
   }
 
   hotbar() {
@@ -350,6 +391,17 @@ export class UI {
     }
   }
 
+  openRest(where) {
+    const g = this.g, h = g.state.time;
+    const title = { tent: 'The old tent', bed: 'Your bed', fire: 'By the fire' }[where];
+    const evening = h >= 6 && h < 17.5;
+    const opts = [];
+    if (evening) opts.push(['evening', 'sun', 'Nap until evening', 'Wake at 6 pm, just in time for golden hour.']);
+    opts.push(['morning', 'moon', h >= 7 ? 'Sleep until morning' : 'Sleep until sunrise', h >= 7 ? `Skip ahead to 7 am on day ${g.state.day + 1}. Gatherables grow back.` : 'Wake at 7 am, warm and dry.']);
+    this.openPanel('rest', `${this.head(title)}<div class="page"><div class="rows">${opts.map(([id, ic, nm, ds]) =>
+      `<div class="row">${this.ico(ic)}<div class="mid"><div class="nm">${nm}</div><div class="ds">${ds}</div></div><button class="btn" data-act="rest" data-id="${id}" data-where="${where}">Rest</button></div>`).join('')}</div></div>`);
+  }
+
   openPause() {
     const g = this.g, st = g.settings;
     this.open = 'pause';
@@ -362,12 +414,16 @@ export class UI {
         <label>Field of view<input id="set-fov" type="range" min="60" max="95" step="1" value="${st.fov}" data-set="fov"></label>
         <label>Music<input id="set-music" type="range" min="0" max="1" step="0.05" value="${st.music}" data-set="music"></label>
         <label>Sounds<input id="set-sfx" type="range" min="0" max="1" step="0.05" value="${st.sfx}" data-set="sfx"></label>
+        <label class="chk"><input id="set-compass" type="checkbox" ${st.compass ? 'checked' : ''} data-set="compass"> Show compass</label>
         <label class="chk"><input id="set-pin" type="checkbox" ${st.pinTask ? 'checked' : ''} data-set="pinTask"> Pin current task</label>
         <label class="chk"><input id="set-map" type="checkbox" ${st.minimap ? 'checked' : ''} data-set="minimap"> Show minimap</label>
-        <label class="chk"><input id="set-fancy" type="checkbox" ${st.fancy ? 'checked' : ''} data-set="fancy"> Glow &amp; sunbeams</label>
-        <label class="chk"><input id="set-shadows" type="checkbox" ${st.shadows ? 'checked' : ''} data-set="shadows"> Shadows</label>
         <label class="chk"><input id="set-invert" type="checkbox" ${st.invert ? 'checked' : ''} data-set="invert"> Invert look</label>
       </div>
+      <div class="sect">Graphics</div>
+      <div class="choice">${[['low', 'Low', 'Longest battery'], ['medium', 'Medium', 'Glow & shadows'], ['high', 'High', 'Sunbeams, full detail']].map(([id, nm, ds]) =>
+        `<button class="season${st.quality === id ? ' sel' : ''}" data-act="quality" data-id="${id}"><div class="nm">${nm}</div><div class="bl">${ds}</div></button>`).join('')}</div>
+      <div class="choice two">${[[30, '30 fps', 'Saves battery'], [60, '60 fps', 'Smoothest']].map(([id, nm, ds]) =>
+        `<button class="season${st.fps === id ? ' sel' : ''}" data-act="fps" data-id="${id}"><div class="nm">${nm}</div><div class="bl">${ds}</div></button>`).join('')}</div>
       <div class="pause-buttons"><button class="btn" data-act="resume">Resume</button><button class="btn alt" data-act="journal">Journal</button><button class="btn alt" data-act="save">Save</button><button class="btn warn" data-act="title">Quit to title</button></div></div>`;
     $('pause').classList.remove('hidden');
   }
@@ -390,6 +446,9 @@ export class UI {
       case 'buy': g.buy(id); this.openShop('buy'); break;
       case 'sell': g.sell(id, parseInt(b.dataset.n)); this.openShop('sell'); break;
       case 'sellfish': for (const k of Object.keys(g.state.inv)) if (k.startsWith('fish:')) g.sell(k, g.state.inv[k]); this.openShop('sell'); break;
+      case 'rest': g.sleep(b.dataset.where, id); break;
+      case 'quality': g.setSetting('quality', id); this.openPause(); break;
+      case 'fps': g.setSetting('fps', +id); this.openPause(); break;
       case 'buildhouse': g.buildHouse(); break;
       case 'buildboat': g.buildBoat(); break;
       case 'season': if (id !== g.season) { g.setSeason(id); this.openPause(); } break;

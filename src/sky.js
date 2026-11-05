@@ -131,8 +131,10 @@ export class Sky {
 
     // shadows follow the player
     if (focus) {
-      this.sun.target.position.copy(focus);
-      this.sun.position.copy(focus).addScaledVector(this.lightDir, 120);
+      // snap the shadow box to a grid so shadows don't shimmer as you walk
+      const sx = Math.round(focus.x / 2) * 2, sz = Math.round(focus.z / 2) * 2;
+      this.sun.target.position.set(sx, focus.y, sz);
+      this.sun.position.set(sx, focus.y, sz).addScaledVector(this.lightDir, 120);
       this.dome.position.copy(focus);
     }
 
