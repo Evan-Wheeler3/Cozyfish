@@ -16,6 +16,9 @@ In the repo's **Settings → Pages**, set *Source* to **Deploy from a branch**, 
 (e.g. `main` after merging) and the **/ (root)** folder. The game appears at
 `https://<your-user>.github.io/<repo>/` a minute later. (`.nojekyll` is included so Pages serves every file untouched.)
 
+**On your phone:** open the site in Safari (or Chrome), then *Share → Add to Home Screen*. It gets the Cozyfish
+icon and opens full-screen like an app.
+
 **Locally:** serve the folder with any static file server and open `index.html`:
 
 ```sh

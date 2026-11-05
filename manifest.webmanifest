@@ -1,0 +1,16 @@
+{
+  "name": "Cozyfish",
+  "short_name": "Cozyfish",
+  "description": "A cozy voxel fishing game in the deep woods.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1a120a",
+  "theme_color": "#2a1a0e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-rounded.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
