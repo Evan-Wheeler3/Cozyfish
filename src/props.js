@@ -161,9 +161,9 @@ export class Props {
     this.decor = [];
     const t = g.terrain, rnd = mulberry32(99);
     const mat4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
-    const inst = (geo, list, scaleR = [0.8, 1.3]) => {
+    const inst = (geo, list, scaleR = [0.8, 1.3], mat = MAT.plant) => {
       if (!list.length) return;
-      const im = new THREE.InstancedMesh(geo, MAT.vox, list.length);
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach(([x, y, z], i) => {
         q.setFromAxisAngle(UP, rnd() * Math.PI * 2);
         const sc = scaleR[0] + rnd() * (scaleR[1] - scaleR[0]);
@@ -205,8 +205,8 @@ export class Props {
       else if (!pal.frozen && h <= POND_MAX_H - 1 && h >= POND_MAX_H - 3 && r > 0.93) (r > 0.985 ? lilyF : lilies).push([x + 0.5, WATER_Y + 0.02, z + 0.5]);
     }
     inst(M.reedGeo(pal.snow || pal.key === 'fall'), reeds, [0.8, 1.2]);
-    inst(M.lilyGeo(false), lilies, [0.9, 1.3]);
-    inst(M.lilyGeo(pal.key !== 'fall'), lilyF, [1, 1.2]);
+    inst(M.lilyGeo(false), lilies, [0.9, 1.3], MAT.vox);
+    inst(M.lilyGeo(pal.key !== 'fall'), lilyF, [1, 1.2], MAT.vox);
     // boulders
     for (const b of this.boulders) {
       const m = new THREE.Mesh(M.boulderGeo(b.seed % 5, pal.snow, pal.key === 'spring' || pal.key === 'summer'), MAT.vox);

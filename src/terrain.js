@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { N, CENTER, WATER_Y, ICE_Y, POND_MAX_H, LAND_H, HOUSE, MARKET, CAMP, SPAWN, DOCK_X } from './config.js';
 import { fbm, valueNoise, hash2, hash3, smoothstep, clamp } from './noise.js';
-import { VoxelMesher, lin, MAT } from './mesher.js';
+import { VoxelMesher, lin, MAT, SHARED } from './mesher.js';
 
 const CH = 32; // chunk size
 
@@ -236,7 +236,7 @@ export class Terrain {
         uTime: { value: 0 }, uDepth: { value: tex },
         uBoxMin: { value: new THREE.Vector2(b.x0, b.z0) }, uBoxSize: { value: new THREE.Vector2(w, d) },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color(1, 1, 1) },
-        uSky: { value: new THREE.Color(0.6, 0.8, 1) }, uDeep: { value: new THREE.Color() }, uShallow: { value: new THREE.Color() },
+        uSky: { value: new THREE.Color(0.6, 0.8, 1) }, uSkyTop: { value: new THREE.Color(0.3, 0.5, 0.9) }, uSunFog: { value: new THREE.Color(1, 0.7, 0.4) }, uDeep: { value: new THREE.Color() }, uShallow: { value: new THREE.Color() },
         uFogCol: { value: new THREE.Color() }, uFogNear: { value: 40 }, uFogFar: { value: 160 },
         uFrozen: { value: 0 }, uLight: { value: 1 },
       };
@@ -264,6 +264,8 @@ export class Terrain {
     u.uSunDir.value.copy(sky.lightDir);
     u.uSunCol.value.copy(sky.sunSpec);
     u.uSky.value.copy(sky.horizon);
+    u.uSkyTop.value.copy(sky.top);
+    u.uSunFog.value.copy(SHARED.uSunFog.value).multiplyScalar(SHARED.uScatter.value);
     u.uFogCol.value.copy(this.g.scene.fog.color);
     u.uFogNear.value = this.g.scene.fog.near; u.uFogFar.value = this.g.scene.fog.far;
     u.uLight.value = sky.dayLight;
@@ -286,7 +288,7 @@ void main(){
 
 const WATER_FS = /* glsl */`
 uniform float uTime, uFrozen, uFogNear, uFogFar, uLight;
-uniform vec3 uSunDir, uSunCol, uSky, uDeep, uShallow, uFogCol;
+uniform vec3 uSunDir, uSunCol, uSky, uSkyTop, uSunFog, uDeep, uShallow, uFogCol;
 uniform sampler2D uDepth; uniform vec2 uBoxMin, uBoxSize;
 varying vec3 vWorld; varying float vFogDepth;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -323,9 +325,13 @@ void main(){
     float fres = pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 4.0);
     vec3 base = mix(uShallow, uDeep, smoothstep(0.02, 0.75, depth));
     base *= mix(0.18, 1.0, uLight);
-    col = mix(base, uSky, fres * 0.75);
+    // reflect the actual sky gradient: horizon at grazing angles, zenith looking down
+    vec3 R = reflect(-V, N);
+    vec3 skyR = mix(uSky, uSkyTop, smoothstep(0.0, 0.5, R.y));
+    skyR += uSunFog * pow(max(dot(normalize(vec3(R.x, max(R.y, 0.0), R.z)), uSunDir), 0.0), 6.0) * 0.8;
+    col = mix(base, skyR, 0.12 + fres * 0.7);
     vec3 H = normalize(uSunDir + V);
-    float spec = pow(max(dot(N, H), 0.0), 220.0) * 3.0 + pow(max(dot(N, H), 0.0), 30.0) * 0.12;
+    float spec = pow(max(dot(N, H), 0.0), 220.0) * 3.5 + pow(max(dot(N, H), 0.0), 45.0) * 0.45 + pow(max(dot(N, H), 0.0), 8.0) * 0.06;
     col += uSunCol * spec;
     float foam = smoothstep(0.1, 0.0, depth) * (0.4 + 0.6 * noise(p * 4.0 + uTime * 0.5));
     col = mix(col, vec3(0.95) * mix(0.3, 1.0, uLight), foam * 0.45);
@@ -334,7 +340,8 @@ void main(){
     if (below) { col = mix(uDeep * 0.8, uSky, 0.3) * mix(0.3, 1.0, uLight); alpha = 0.75; }
   }
   float f = smoothstep(uFogNear, uFogFar, vFogDepth);
-  col = mix(col, uFogCol, f);
+  float sc = max(dot(-V, uSunDir), 0.0);
+  col = mix(col, uFogCol + uSunFog * pow(sc, 5.0) * 0.8, f);
   gl_FragColor = vec4(col, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

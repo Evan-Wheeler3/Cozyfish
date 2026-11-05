@@ -197,7 +197,7 @@ export class Forest {
       let mesh = this.meshes[vi];
       if (mesh) { mesh.geometry.dispose(); mesh.geometry = this.geos[vi]; }
       else {
-        mesh = new THREE.InstancedMesh(this.geos[vi], MAT.vox, Math.max(1, counts[vi]));
+        mesh = new THREE.InstancedMesh(this.geos[vi], MAT.tree, Math.max(1, counts[vi]));
         mesh.count = counts[vi];
         mesh.castShadow = true; mesh.receiveShadow = true;
         this.g.scene.add(mesh);
@@ -247,7 +247,7 @@ export class Forest {
     this.syncTree(tr);
     const pivot = new THREE.Group();
     pivot.position.set(tr.x + 0.5, tr.y + 0.5, tr.z + 0.5);
-    const mesh = new THREE.Mesh(this.geos[tr.vi], MAT.vox);
+    const mesh = new THREE.Mesh(this.geos[tr.vi], MAT.tree);
     mesh.position.y = -0.5;
     mesh.rotation.y = tr.yaw;
     mesh.castShadow = true;

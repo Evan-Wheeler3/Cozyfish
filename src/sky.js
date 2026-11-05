@@ -1,6 +1,7 @@
 // Sky dome, sun & moon lighting, day/night colour grading, voxel clouds.
 import * as THREE from 'three';
 import { mulberry32, smoothstep, clamp } from './noise.js';
+import { SHARED } from './mesher.js';
 
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function mixC(out, a, b, t) { return out.copy(a).lerp(b, clamp(t, 0, 1)); }
@@ -82,6 +83,7 @@ export class Sky {
     const duskF = Math.exp(-Math.pow(e / 0.2, 2));
     const nightF = smoothstep(0.02, -0.22, e);
     this.night = nightF;
+    this.dusk = duskF;
 
     mixC(this.top, P.night[0], P.day[0], dayF); this.top.lerp(P.dusk[0], duskF * 0.55);
     mixC(this.horizon, P.night[1], P.day[1], dayF); this.horizon.lerp(P.dusk[1], duskF * 0.8);
@@ -92,22 +94,32 @@ export class Sky {
     this.uniforms.uTime.value += dt;
 
     // directional light: sun by day, moon by night
-    const golden = _c1.setHex(0xff9a50);
+    const golden = _c1.setHex(0xff7a30);
     if (e > -0.06) {
       this.lightDir.copy(this.sunDir);
-      this.sun.color.copy(golden).lerp(P.sun, smoothstep(0.02, 0.45, e));
-      this.sun.intensity = 2.9 * smoothstep(-0.06, 0.16, e);
+      this.sun.color.copy(golden).lerp(P.sun, smoothstep(0.04, 0.6, e));
+      this.sun.intensity = 3.3 * smoothstep(-0.06, 0.12, e);
     } else {
       this.lightDir.copy(this.sunDir).negate();
       this.sun.color.setHex(0x9ab4ff);
       this.sun.intensity = 0.55 * smoothstep(-0.06, -0.25, e);
     }
-    if (this.lightDir.y < 0.12) { this.lightDir.y = 0.12; this.lightDir.normalize(); }
+    if (this.lightDir.y < 0.1) { this.lightDir.y = 0.1; this.lightDir.normalize(); }
     this.uniforms.uSunCol.value.copy(this.sun.color).multiplyScalar(e > -0.06 ? 1 : 0.0);
-    this.sunSpec.copy(this.sun.color).multiplyScalar(Math.min(1, this.sun.intensity / 2));
+    this.sunSpec.copy(this.sun.color).multiplyScalar(Math.min(1.2, this.sun.intensity / 2));
 
-    this.hemi.color.copy(this.top).lerp(_c2.setHex(0xffffff), 0.35);
-    this.hemi.groundColor.setHex(this.pal.snow ? 0x8a8f9a : 0x5a4a30).lerp(this.horizon, 0.2);
+    // shader-pack haze: fog glows warm toward the sun
+    const sunUp = smoothstep(-0.08, 0.02, e);
+    SHARED.uSunFog.value.copy(this.sun.color).lerp(_c2.setHex(0xfff0d8), 0.25 * (1 - duskF)).multiplyScalar(1.0 + duskF * 0.9);
+    SHARED.uScatter.value = (0.35 + duskF * 0.75) * sunUp;
+    SHARED.uTime.value += dt;
+    if (this.g.camera) {
+      this.g.camera.updateMatrixWorld();
+      SHARED.uSunView.value.copy(this.sunDir).transformDirection(this.g.camera.matrixWorldInverse);
+    }
+
+    this.hemi.color.copy(this.top).lerp(this.horizon, 0.3 + duskF * 0.45).lerp(_c2.setHex(0xffffff), 0.25);
+    this.hemi.groundColor.setHex(this.pal.snow ? 0x8a8f9a : 0x6a5236).lerp(golden, duskF * 0.35).lerp(this.horizon, 0.15);
     this.hemi.intensity = 0.55 + 0.75 * dayF + duskF * 0.35 + (this.pal.snow ? 0.1 : 0);
     this.dayLight = 0.22 + 0.78 * dayF;
 
@@ -160,7 +172,7 @@ void main(){
   vec3 col = mix(uHorizon, uTop, pow(smoothstep(-0.02, 0.65, y), 0.75));
   if (y < 0.0) col = mix(uHorizon, uHorizon * 0.75, smoothstep(0.0, -0.3, y));
   float s = max(dot(d, uSunDir), 0.0);
-  col += uSunCol * (smoothstep(0.9990, 0.9995, s) * 6.0 + pow(s, 220.0) * 1.2 + pow(s, 9.0) * (0.12 + uDusk * 0.35));
+  col += uSunCol * (smoothstep(0.9988, 0.9994, s) * 12.0 + pow(s, 200.0) * 1.6 + pow(s, 9.0) * (0.15 + uDusk * 0.7) + pow(s, 2.5) * uDusk * 0.22);
   float m = max(dot(d, -uSunDir), 0.0);
   col += vec3(1.1, 1.08, 1.0) * smoothstep(0.99935, 0.9996, m) * uNight * 1.6 + vec3(0.4, 0.5, 0.8) * pow(m, 60.0) * uNight * 0.25;
   if (uNight > 0.01 && y > 0.0) {

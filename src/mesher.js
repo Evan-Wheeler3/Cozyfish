@@ -130,22 +130,50 @@ export class VoxelModel {
   }
 }
 
-// Adds a subtle pixel-grain "texture" to every voxel face, computed from world
-// position — Minecraft-like texel detail without any texture files.
-export function addGrain(mat, texels = 8, amount = 0.2) {
+// Shared uniforms for the "shader pack" look (updated each frame by Sky).
+export const SHARED = {
+  uTime: { value: 0 },
+  uSunView: { value: new THREE.Vector3(0, 1, 0) },   // sun direction in view space
+  uSunFog: { value: new THREE.Color(1, 0.7, 0.4) },  // haze colour toward the sun
+  uScatter: { value: 0.5 },
+  uWind: { value: 1 },
+};
+
+// Voxel material with: pixel-grain texel detail, sun-scattering haze and
+// optional wind sway (leaves / grass). Clean "Minecraft shaders" vibe.
+export function voxMat(opts = {}) {
+  const { vertexColors = true, texels = 8, amount = 0.2, sway = 0, swayFrom = 2, swayTo = 6, roughness = 0.92 } = opts;
+  const mat = new THREE.MeshStandardMaterial({ vertexColors, roughness, metalness: 0 });
   mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, SHARED);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vGrainW; varying vec3 vGrainN;')
+      .replace('#include <common>', `#include <common>
+        uniform float uTime; uniform float uWind;
+        varying vec3 vGrainW; varying vec3 vGrainN; varying vec3 vHazeView;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        ${sway > 0 ? `{
+          vec4 sw = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            sw = instanceMatrix * sw;
+          #endif
+          sw = modelMatrix * sw;
+          float k = smoothstep(${swayFrom.toFixed(2)}, ${swayTo.toFixed(2)}, transformed.y) * ${sway.toFixed(3)} * uWind;
+          float ph = sw.x * 0.35 + sw.z * 0.27;
+          transformed.x += (sin(uTime * 1.7 + ph) + sin(uTime * 3.1 + ph * 2.3) * 0.35) * k;
+          transformed.z += cos(uTime * 1.3 + ph * 1.2) * k * 0.7;
+        }` : ''}`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         vec4 gW = vec4(transformed, 1.0);
         vec3 gN = objectNormal;
         #ifdef USE_INSTANCING
           gW = instanceMatrix * gW; gN = mat3(instanceMatrix) * gN;
         #endif
-        vGrainW = (modelMatrix * gW).xyz; vGrainN = normalize(mat3(modelMatrix) * gN);`);
+        vGrainW = (modelMatrix * gW).xyz; vGrainN = normalize(mat3(modelMatrix) * gN);
+        vHazeView = mvPosition.xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying vec3 vGrainW; varying vec3 vGrainN;
+        uniform vec3 uSunView; uniform vec3 uSunFog; uniform float uScatter;
+        varying vec3 vGrainW; varying vec3 vGrainN; varying vec3 vHazeView;
         float gHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
@@ -153,15 +181,24 @@ export function addGrain(mat, texels = 8, amount = 0.2) {
           float gn = gHash(gp);
           float gn2 = gHash(floor(gp * 0.5) + 7.0);
           diffuseColor.rgb *= 1.0 + ((gn - 0.5) * ${amount.toFixed(3)} + (gn2 - 0.5) * ${(amount * 0.6).toFixed(3)});
-        }`);
+        }`)
+      .replace('#include <fog_fragment>', `
+        #ifdef USE_FOG
+          float hazeF = smoothstep(fogNear, fogFar, vFogDepth);
+          float sc = max(dot(normalize(vHazeView), uSunView), 0.0);
+          vec3 hz = mix(fogColor, uSunFog, (pow(sc, 5.0) * 0.8 + pow(sc, 40.0) * 0.6) * uScatter);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, hz, hazeF);
+        #endif`);
   };
-  mat.customProgramCacheKey = () => 'grain' + texels + amount;
+  mat.customProgramCacheKey = () => ['vox', vertexColors, texels, amount, sway, swayFrom, swayTo].join('|');
   return mat;
 }
 
 export const MAT = {
-  vox: addGrain(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 })),
-  inst: addGrain(new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0 })),
+  vox: voxMat(),
+  inst: voxMat({ vertexColors: false, roughness: 0.88 }),
+  tree: voxMat({ sway: 0.07, swayFrom: 2.5, swayTo: 9 }),
+  plant: voxMat({ sway: 0.06, swayFrom: 0.05, swayTo: 0.9 }),
 };
 
 export function glowMat(hex, intensity = 2.5) {
