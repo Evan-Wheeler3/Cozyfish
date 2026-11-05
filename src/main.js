@@ -132,7 +132,8 @@ class Game {
     this.ui.initTitle((k) => { this.audio.init(); this.applySeason(k); });
     if (this.saved) $('btn-continue').classList.remove('hidden');
     $('btn-new').onclick = () => {
-      if (this.saved && !confirm('Start a new game? Your saved pond life will be replaced.')) return;
+      // in-page confirmation (dialogs aren't available everywhere)
+      if (this.saved && !this.confirmNew) { this.confirmNew = true; $('btn-new').textContent = 'Start over? Click again'; return; }
       this.start(false);
     };
     $('btn-continue').onclick = () => this.start(true);
