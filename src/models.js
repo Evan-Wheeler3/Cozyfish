@@ -248,7 +248,7 @@ export function npcModel() {
   g.add(new THREE.Mesh(body.build(0.12, 0, 0, 0, 0.06, 2), MAT.vox));
   const head = new VoxelModel();
   head.box(-2, 0, -2, 1, 3, 1, 0xf0c8a0);
-  head.box(-2, 3, -2, 1, 4, 1, 0xd8d8d8); head.box(-2, 0, -2, 1, 3, -2, 0xd8d8d8); // hair
+  head.box(-2, 4, -2, 1, 4, 1, 0xd8d8d8); head.box(-2, 0, -2, 1, 3, -2, 0xd8d8d8); head.set(-2, 3, 1, 0xd8d8d8); head.set(1, 3, 1, 0xd8d8d8); head.box(-2, 3, -1, -2, 3, 0, 0xd8d8d8); head.box(1, 3, -1, 1, 3, 0, 0xd8d8d8); // hair
   head.box(-1, 5, -1, 0, 5, 0, 0xc8c8c8); // bun
   head.set(-1, 2, 1, 0x2a1a10); head.set(0, 2, 1, 0x2a1a10);  // eyes (front = +z)
   head.set(-2, 1, 1, 0xe89a8a); head.set(1, 1, 1, 0xe89a8a);  // cheeks

@@ -324,7 +324,7 @@ export class Structures {
     g.scene.add(base);
     const fire = this.makeFlames(pos.clone().add(new THREE.Vector3(0.48, 0.12, 0.48)), 1);
     const cf = { pos: pos.clone().add(new THREE.Vector3(0.5, 0, 0.5)), base, fire };
-    cf.inter = { id: 'campfire', pos: cf.pos.clone().setY(pos.y + 0.4), r: 0.9, label: () => 'Warm up by the fire', action: () => g.ui.toast('🔥', 'Toasty. You feel warm and dry.'), passive: true };
+    cf.inter = { id: 'campfire', pos: cf.pos.clone().setY(pos.y + 0.4), r: 0.9, label: () => 'Warm up by the fire', action: () => g.ui.toast('flame', 'Toasty. You feel warm and dry.'), passive: true };
     this.interactables.push(cf.inter);
     this.campfires.push(cf);
     if (!restoring) g.state.campfires.push([pos.x, pos.y, pos.z]);

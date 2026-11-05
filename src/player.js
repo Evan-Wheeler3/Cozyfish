@@ -158,11 +158,12 @@ export class Player {
       this.inWater = false; this.swimming = false; this.onGround = true;
     } else {
       const k = active ? input.keys : new Set();
-      const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-      const s = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+      const ax = active && input.axis ? input.axis : { x: 0, y: 0 };
+      const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + ax.y;
+      const s = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + ax.x;
       const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
       let wx = -sin * f + cos * s, wz = -cos * f - sin * s;
-      const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
+      const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
 
       const wy = t.waterY();
       const pond = !t.frozen && t.isPond(this.pos.x, this.pos.z);
@@ -170,7 +171,7 @@ export class Player {
       this.inWater = depth > 0.15;
       this.swimming = depth > 1.05;
       if (this.inWater) g.state.wet = 1;
-      const sprint = k.has('ShiftLeft') || k.has('ShiftRight');
+      const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || (active && input.run);
       let speed = this.swimming ? (sprint ? 3.6 : 2.6) : sprint ? 6.6 : 4.3;
       if (this.inWater && !this.swimming) speed *= 0.7;
       if (g.state.warmth < 20) speed *= 0.78;
@@ -187,7 +188,7 @@ export class Player {
         this.vel.y *= Math.exp(-2.5 * dt);
         this.vel.y -= 1 * dt;
         this.swimT -= dt;
-        if (wl > 0 && this.swimT < 0) { this.swimT = 0.9; g.audio.play('swim'); g.fx.ripple(this.pos, 0.8); }
+        if (wl > 0.1 && this.swimT < 0) { this.swimT = 0.9; g.audio.play('swim'); g.fx.ripple(this.pos, 0.8); }
       } else {
         this.vel.y -= (this.inWater ? 18 : 26) * dt;
         if (k.has('Space') && this.onGround) { this.vel.y = this.inWater ? 6 : 8.2; this.onGround = false; }
@@ -225,7 +226,7 @@ export class Player {
     const sh = this.shake * 0.25;
     cam.position.set(this.pos.x + (Math.random() - 0.5) * sh, this.pos.y + EYE + this.stepSmooth + bob + (Math.random() - 0.5) * sh, this.pos.z);
     cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
-    const sprinting = input.keys.has('ShiftLeft') && Math.hypot(this.vel.x, this.vel.z) > 5;
+    const sprinting = (input.keys.has('ShiftLeft') || input.run) && Math.hypot(this.vel.x, this.vel.z) > 5;
     const fov = (g.settings.fov || 72) + (sprinting ? 6 : 0);
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix(); }
     const wy = t.waterY();

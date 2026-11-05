@@ -16,6 +16,7 @@ import { Boat } from './boat.js';
 import { Life } from './life.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
+import { Touch } from './touch.js';
 import { createRenderer, Post } from './render.js';
 import { MAT } from './mesher.js';
 import * as M from './models.js';
@@ -40,11 +41,13 @@ function newState(season) {
 class Game {
   constructor() {
     this.canvas = $('game');
-    this.renderer = createRenderer(this.canvas, { maxDpr: 1.5, preserve: /[?&]test/.test(location.search) });
+    this.touch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+    if (this.touch) document.body.classList.add('touch');
+    this.renderer = createRenderer(this.canvas, { maxDpr: this.touch ? 1.25 : 1.5, preserve: /[?&]test/.test(location.search) });
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 700);
     this.scene.add(this.camera);
-    this.settings = Object.assign({ sens: 1, fov: 72, music: 0.5, sfx: 0.9, fancy: true, shadows: true, invert: false }, store(SETTINGS_KEY) || {});
+    this.settings = Object.assign({ sens: 1, fov: 72, music: 0.5, sfx: 0.9, fancy: true, shadows: true, invert: false, pinTask: false, minimap: false }, store(SETTINGS_KEY) || {});
     this.saved = store(SAVE_KEY);
     this.season = this.saved ? this.saved.season : 'summer';
     this.palette = SEASONS[this.season];
@@ -72,6 +75,7 @@ class Game {
     this.fishing = new Fishing(this);
     this.life = new Life(this);
     this.ui = new UI(this);
+    if (this.touch) { this.touchCtl = new Touch(this); this.sky.sun.shadow.mapSize.set(1024, 1024); }
     this.post = new Post(this.renderer, this.scene, this.camera, this.sky);
     this.post.hideForOcc = [...this.fx.hide, this.fishing.line];
     this.fx.resize(this.renderer.getSize(new THREE.Vector2()).y * this.renderer.getPixelRatio());
@@ -123,13 +127,13 @@ class Game {
   setSeason(key) {
     this.applySeason(key);
     if (this.fishing.active()) this.fishing.cancel();
-    this.ui.toast(SEASONS[key].emoji, `It's ${SEASONS[key].name.toLowerCase()} at the pond.`);
+    this.ui.banner(SEASONS[key].name, SEASONS[key].blurb);
   }
 
   // ─── Title & start ───
   setupTitle() {
     this.ui.selSeason = this.season;
-    this.ui.initTitle((k) => { this.audio.init(); this.applySeason(k); });
+    this.ui.initTitle((k) => { this.audio.init(); this.applySeason(k); }, this.touch);
     if (this.saved) $('btn-continue').classList.remove('hidden');
     $('btn-new').onclick = () => {
       // in-page confirmation (dialogs aren't available everywhere)
@@ -157,32 +161,43 @@ class Game {
     this.player.vm.visible = true;
     $('title').classList.add('hidden');
     $('hud').classList.remove('hidden');
+    if (this.touchCtl) this.touchCtl.show(true);
     this.ui.buildMap();
     this.selectSlot(SLOTS.indexOf(this.state.tools.rod ? 'rod' : 'hands'));
     this.lock();
-    if (!cont) setTimeout(() => this.ui.toast('🌲', 'You wake up by a quiet pond in the deep woods…'), 600);
-    else this.ui.toast('🏡', `Welcome back! Day ${this.state.day}.`);
+    if (!cont) this.ui.banner('Day 1', 'You wake up by a quiet pond in the deep woods…', 4500);
+    else this.ui.banner(`Day ${this.state.day}`, `Welcome back. It's ${SEASONS[this.season].name.toLowerCase()} at the pond.`);
+    this.announcedQuest = this.state.quest;
+    setTimeout(() => this.announceTask(), 5200);
   }
 
   quitToTitle() { this.saveGame(); location.reload(); }
 
   // ─── Input ───
-  lock() { if (this.noLock) return; if (this.mode === 'play' && !this.ui.isOpen()) { try { const p = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } } }
-  get locked() { return this.noLock ? this.mode === 'play' && !this.ui.isOpen() : document.pointerLockElement === this.canvas; }
+  // Mouse capture where it works; touch or blocked capture falls back gracefully.
+  lock() {
+    if (this.touch || this.noLock || this.mode !== 'play' || this.ui.isOpen()) return;
+    const fail = () => { if (!this.everLocked) this.useFreeMouse(); };
+    if (!this.canvas.requestPointerLock) return fail();
+    try { const p = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
+  }
+  useFreeMouse() {
+    if (this.noLock || this.mode !== 'play') return;
+    this.noLock = true;
+    $('resume').classList.add('hidden');
+    this.ui.toast(null, 'Mouse capture is blocked here: hold the right button and drag to look. Esc for the menu.');
+  }
+  get locked() { return (this.touch || this.noLock) ? this.mode === 'play' && !this.ui.isOpen() : document.pointerLockElement === this.canvas; }
 
   bindInput() {
     const inp = this.input;
     document.addEventListener('pointerlockchange', () => {
-      if (this.locked) { $('resume').classList.add('hidden'); this.expectUnlock = false; return; }
+      if (this.locked) { this.everLocked = true; $('resume').classList.add('hidden'); this.expectUnlock = false; return; }
       inp.keys.clear(); inp.mouseDown = false;
       if (this.mode === 'play' && !this.ui.isOpen() && !this.expectUnlock) this.ui.openPause();
       this.expectUnlock = false;
     });
-    document.addEventListener('pointerlockerror', () => {
-      if (this.noLock || this.mode !== 'play') return;
-      this.noLock = true;
-      this.ui.toast('🖱️', 'Mouse capture is blocked here — hold the right mouse button and drag to look. Esc pauses.');
-    });
+    document.addEventListener('pointerlockerror', () => { if (!this.everLocked) this.useFreeMouse(); });
     document.addEventListener('mousemove', (e) => {
       if (this.noLock) { if (this.dragLook && !this.paused()) { inp.mouseDX += e.movementX; inp.mouseDY += e.movementY; } return; }
       if (this.locked) { inp.mouseDX += e.movementX; inp.mouseDY += e.movementY; }
@@ -194,7 +209,7 @@ class Game {
       if (!this.locked) { this.lock(); return; }
     });
     document.addEventListener('mousedown', (e) => {
-      if (!this.locked || this.paused()) return;
+      if (this.touch || !this.locked || this.paused() || e.target !== this.canvas && !document.pointerLockElement) return;
       if (e.button === 0) { inp.mouseDown = true; this.useDown(); }
     });
     document.addEventListener('mouseup', (e) => {
@@ -215,18 +230,19 @@ class Game {
       if (e.repeat && e.code !== 'KeyE') return;
       if (e.code === 'Escape' && this.noLock && !this.ui.isOpen()) { this.ui.openPause(); return; }
       if (this.ui.isOpen()) {
-        if (e.code === 'Escape' || e.code === 'Tab' && this.ui.open === 'inv' || e.code === 'KeyJ' && this.ui.open === 'journal' || e.code === 'KeyE' && this.ui.open !== 'pause') this.ui.close();
+        const j = this.ui.open === 'journal';
+        if (e.code === 'Escape' || (e.code === 'Tab' || e.code === 'KeyJ') && j || e.code === 'KeyE' && this.ui.open !== 'pause') this.ui.close();
         return;
       }
       inp.keys.add(e.code);
       if (this.sleeping) return;
       switch (e.code) {
-        case 'Tab': this.ui.openInventory(); break;
+        case 'Tab': this.ui.openJournal('pack'); break;
         case 'KeyJ': this.ui.openJournal(); break;
         case 'KeyE': if (!e.repeat) this.interact(); break;
         case 'KeyF':
           if (this.state.tools.lantern) { this.state.lanternOn = !this.state.lanternOn; this.audio.play('ui'); }
-          else this.ui.toast('🏮', 'You need a lantern — Mabel sells them.');
+          else this.ui.toast('lantern', 'You need a lantern — Mabel sells them.');
           break;
         default:
           if (e.code.startsWith('Digit')) { const i = parseInt(e.code.slice(5)) - 1; if (i >= 0 && i < SLOTS.length) this.selectSlot(i); }
@@ -252,7 +268,7 @@ class Game {
     const s = SLOTS[i];
     if (!this.slotOwned(s)) {
       const why = { rod: 'Craft a Stick Rod first (Tab).', axe: 'Craft a Stone Axe first (Tab).', stone: 'Pick up some stones first.', lantern: 'Buy a lantern from Mabel.' }[s];
-      if (why) this.ui.toast('🔒', why);
+      if (why) this.ui.toast(null, why);
       return;
     }
     if (s !== 'rod' && this.fishing.active()) this.fishing.cancel();
@@ -272,11 +288,11 @@ class Game {
       this.audio.play('swing');
       const t = this.target;
       if (t && t.kind === 'tree') {
-        if (held === 'hands') { this.ui.toast('✋', 'Ouch! You need an axe for that.'); return; }
+        if (held === 'hands') { this.ui.toast('hands', 'Ouch! You need an axe for that.'); return; }
         this.later(0.13, () => {
           if (!t.tr.alive) return;
           const r = this.forest.hit(t.tr, p.pos, AXES[this.state.tools.axe].hits);
-          if (r === 'felled') { this.state.stats.chopped++; this.ui.toast('🌲', 'Timber!'); }
+          if (r === 'felled') { this.state.stats.chopped++; this.ui.toast('log', 'Timber!'); }
         });
       }
     }
@@ -322,7 +338,7 @@ class Game {
           const st = this.state.stats;
           const rec = s.skips > st.bestSkip;
           if (rec) st.bestSkip = s.skips;
-          this.ui.toast('🪨', `${s.skips} skip${s.skips > 1 ? 's' : ''}!${rec && s.skips > 1 ? ' New record!' : ''}`);
+          this.ui.toast('stone', `${s.skips} skip${s.skips > 1 ? 's' : ''}!${rec && s.skips > 1 ? ' New record!' : ''}`);
         }
       };
       if (t.isPond(s.pos.x, s.pos.z) && !t.hasSolid(Math.floor(s.pos.x), 8, Math.floor(s.pos.z))) {
@@ -375,7 +391,7 @@ class Game {
         d.mesh.position.copy(d.pos); d.mesh.scale.setScalar(Math.max(0.3, Math.min(1, dist / 1.5)));
         if (dist < 0.7) {
           this.add(d.type, 1);
-          this.ui.toast(ITEMS[d.type].icon, `+1 ${ITEMS[d.type].name}`);
+          this.ui.toast(d.type, `+1 ${ITEMS[d.type].name}`);
           this.audio.play('pickup');
           this.scene.remove(d.mesh); this.debris.splice(i, 1);
         }
@@ -470,13 +486,11 @@ class Game {
     const loot = this.props.harvest(it);
     if (!loot) return;
     const pos = new THREE.Vector3(it.x, it.y + 0.3, it.z);
-    const parts = [];
     for (const [k, n] of Object.entries(loot)) {
-      if (k === 'coins') { this.state.coins += n; parts.push(`🪙 ${n}`); this.audio.play('coin'); continue; }
+      if (k === 'coins') { this.state.coins += n; this.ui.toast('coin', `+${n} Coins`, 'gold'); this.audio.play('coin'); continue; }
       this.add(k, n);
-      parts.push(`${ITEMS[k].icon} +${n} ${ITEMS[k].name}`);
+      this.ui.toast(k, `+${n} ${ITEMS[k].name}`);
     }
-    this.ui.toast(it.type === 'crate' ? '📦' : '✨', parts.join('  '));
     this.audio.play(it.type === 'mound' ? 'dig' : 'pickup');
     const col = { stick: [0x87593a], stone: [0x8f8d88], fiber: [0xb9d27a], bush: [0x3a4fb8, 0x5a9a44], mushroom: [0xc8322a, 0xf2ead8], mound: [0x6a4a30, 0x5a3e28], crate: [0xd8b04a, 0x8a5e38] }[it.type];
     this.fx.burst(pos, col, it.type === 'mound' ? 18 : 8, 2.5, 0.07);
@@ -491,22 +505,22 @@ class Game {
     if (r.gives.place === 'campfire') {
       const p = this.player.pos;
       const x = Math.floor(p.x - Math.sin(this.player.yaw) * 2), z = Math.floor(p.z - Math.cos(this.player.yaw) * 2);
-      if (this.terrain.isPond(x, z) || this.terrain.hasSolid(x, this.terrain.H(x, z), z)) { this.ui.toast('🔥', "Can't build a fire there. Face some open ground."); return; }
+      if (this.terrain.isPond(x, z) || this.terrain.hasSolid(x, this.terrain.H(x, z), z)) { this.ui.toast('flame', "Can't build a fire there. Face some open ground."); return; }
       this.remove(r.needs);
       this.structures.addCampfire(new THREE.Vector3(x, this.terrain.surfaceY(x, z), z));
-      this.ui.toast('🔥', 'You build a crackling campfire.');
+      this.ui.toast('flame', 'You build a crackling campfire.');
       this.audio.play('craft');
       return;
     }
     this.remove(r.needs);
     if (r.gives.tool) {
       this.state.tools[r.gives.tool] = r.gives.tier;
-      this.ui.toast(r.icon, `Crafted a ${r.name}! Press ${SLOTS.indexOf(r.gives.tool) + 1} to equip.`);
+      this.ui.toast(r.gives.tool + ':1', `Crafted a ${r.name}`);
       if (r.gives.tool === 'rod') this.selectSlot(1);
       if (r.gives.tool === 'axe') this.selectSlot(2);
     } else {
       this.add(r.gives.item, r.gives.qty);
-      this.ui.toast(r.icon, `Crafted ${r.name}.`);
+      this.ui.toast(r.gives.item, `Crafted ${r.name}`);
     }
     this.audio.play('craft');
   }
@@ -519,7 +533,7 @@ class Game {
     else if (it.kind === 'axe') { s.tools.axe = it.tier; if (this.player.held === 'axe') this.player.setHeld('axe'); }
     else if (it.kind === 'lantern') { s.tools.lantern = true; s.lanternOn = true; }
     else this.add(it.item, it.qty);
-    this.ui.toast(it.icon, `Bought ${it.name}.`);
+    this.ui.toast(it.kind === 'rod' ? 'rod:' + it.tier : it.kind === 'axe' ? 'axe:' + it.tier : it.item || it.id, `Bought ${it.name}`);
     this.audio.play('coin');
   }
 
@@ -543,7 +557,7 @@ class Game {
     if (p.x > HOUSE.x - 3 && p.x < HOUSE.x + 10 && p.z > HOUSE.z - 2 && p.z < HOUSE.z + 9) { p.set(HOUSE.x - 3.5, 9.01, HOUSE.z + 3.5); this.player.yaw = -Math.PI / 2; this.player.pitch = 0.1; }
     this.structures.buildHouseStage(s.house);
     s.house++;
-    this.ui.toast('🏡', `${st.name} built!`);
+    this.ui.toast('house', `${st.name} built!`);
     this.saveGame();
   }
 
@@ -553,7 +567,7 @@ class Game {
     this.state.boat = true;
     this.spawnBoat();
     this.ui.close();
-    this.ui.toast('🛶', 'Your rowboat is ready at the end of the dock!');
+    this.ui.toast('boat', 'Your rowboat is ready at the end of the dock!');
     this.audio.play('craft');
     this.fx.splash(this.boat.pos, 20, 1);
     this.saveGame();
@@ -583,7 +597,7 @@ class Game {
   sleep(where) {
     if (this.sleeping) return;
     const h = this.state.time;
-    if (h >= 6 && h < 17) { this.ui.toast('😴', "You're not sleepy yet. Come back after 5 pm."); return; }
+    if (h >= 6 && h < 17) { this.ui.toast('moon', "You're not sleepy yet. Come back after 5 pm."); return; }
     this.sleeping = true;
     if (this.fishing.active()) this.fishing.cancel();
     $('fade').classList.add('on');
@@ -595,7 +609,7 @@ class Game {
       this.saveGame();
       $('fade').classList.remove('on');
       this.sleeping = false;
-      this.ui.toast('☀️', `Good morning! Day ${this.state.day}. ${where === 'tent' ? 'The old tent was surprisingly cozy.' : 'You slept wonderfully.'}`);
+      this.ui.banner(`Day ${this.state.day}`, where === 'tent' ? 'The old tent was surprisingly cozy.' : 'Good morning. You slept wonderfully.');
     }, 1600);
   }
 
@@ -653,7 +667,7 @@ class Game {
       const paused = this.paused();
       if (!paused) {
         s.time += dt * 24 / DAY_LENGTH;
-        if (s.time >= 24) { s.time -= 24; this.newDay(); this.ui.toast('🌙', `Day ${s.day} begins.`); }
+        if (s.time >= 24) { s.time -= 24; this.newDay(); this.ui.banner(`Day ${s.day}`, 'A new day begins under the stars.'); }
         this.swingCD = Math.max(0, this.swingCD - dt);
         this.runTimers(dt);
       }
@@ -680,7 +694,7 @@ class Game {
       } else this.ui.prompt(null);
       if (this.boat) this.boat.update(dt, paused ? null : this.input);
       this.ui.update(dt);
-      $('resume').classList.toggle('hidden', this.locked || this.ui.isOpen() || this.sleeping || !!this.dragLook);
+      $('resume').classList.toggle('hidden', this.touch || this.noLock || this.locked || this.ui.isOpen() || this.sleeping || !this.everLocked);
       this.sky.update(dt, s.time, this.player.pos);
     }
     this.forest.update(dt);
@@ -726,8 +740,13 @@ class Game {
       s.wet = Math.max(0, s.wet - dt / (this.season === 'summer' ? 25 : 45));
     }
     s.warmth = Math.max(0, Math.min(100, s.warmth));
-    if (s.warmth < 30 && !this.coldWarned) { this.coldWarned = true; this.ui.toast('🥶', 'Brr! Warm up by a campfire or indoors.'); }
+    if (s.warmth < 30 && !this.coldWarned) { this.coldWarned = true; this.ui.toast('snowflake', 'Brr! Warm up by a campfire or indoors.'); }
     if (s.warmth > 50) this.coldWarned = false;
+  }
+
+  announceTask() {
+    const q = QUESTS[this.state.quest];
+    if (q && !this.settings.pinTask) this.ui.banner(q.text, this.touch ? 'Tap the book for your journal.' : 'Press J to open your journal.', 4200);
   }
 
   checkQuests() {
@@ -735,10 +754,11 @@ class Game {
     let q = QUESTS[s.quest];
     while (q && q.done(this)) {
       s.quest++;
-      this.ui.toast('✅', `Goal complete: ${q.text}`, 'goal');
+      this.ui.toast('book', `Done: ${q.text}`, 'gold');
       this.audio.play('goal');
       q = QUESTS[s.quest];
     }
+    if (this.announcedQuest !== s.quest) { this.announcedQuest = s.quest; this.later(2.5, () => this.announceTask()); }
   }
 }
 

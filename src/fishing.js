@@ -33,11 +33,11 @@ export class Fishing {
     const g = this.g, p = g.player;
     switch (this.state) {
       case 'idle':
-        if (p.swimming) { g.ui.toast('🏊', "You can't fish while swimming."); return; }
+        if (p.swimming) { g.ui.toast(null, "You can't fish while swimming."); return; }
         this.state = 'charging'; this.power = 0; this.chargeT = 0;
         break;
       case 'waiting':
-        if (this.nibbleT > 0) { g.ui.toast('🐟', 'Too early! You spooked it.'); this.timer = this.biteTime() + 2; this.nibbleT = 0; }
+        if (this.nibbleT > 0) { g.ui.toast('fish:bluegill', 'Too early! You spooked it.'); this.timer = this.biteTime() + 2; this.nibbleT = 0; }
         else this.reelBack();
         break;
       case 'bite': this.hook(); break;
@@ -113,7 +113,7 @@ export class Fishing {
     this.lateral = 0; this.latTarget = 0;
     g.audio.play('splash', 0.8);
     g.fx.splash(this.bobPos, 18, 0.8);
-    g.ui.toast('🎣', 'Hooked! Hold to reel — ease off when it pulls.');
+    g.ui.toast('rod:1', 'Hooked! Hold to reel — ease off when it pulls.');
   }
 
   reelBack() { this.state = 'reelback'; this.ui(); }
@@ -172,9 +172,9 @@ export class Fishing {
           else { g.fx.splash(this.bobPos, 10, 0.6); g.audio.play('plop'); }
           this.state = 'waiting'; this.timer = this.biteTime(); this.nibbleT = 0; this.nextNibble = 1 + Math.random() * 2;
           this.bait = g.currentBait();
-          if (!this.bait) g.ui.toast('🪱', 'No bait… bites will be slow. Dig worms from dirt mounds.');
+          if (!this.bait) g.ui.toast('worm', 'No bait… bites will be slow. Dig worms from dirt mounds.');
         } else if (t.isSolid(ix, iy, iz) || this.bobPos.y < 0) {
-          g.ui.toast('🎣', 'Cast into the water!');
+          g.ui.toast('rod:1', 'Cast into the water!');
           this.reelBack();
         }
         break;
@@ -199,14 +199,14 @@ export class Fishing {
           if (!t.frozen) g.fx.splash(this.bobPos, 8, 0.5);
         }
         const pp = p.pos;
-        if (Math.hypot(pp.x - this.bobPos.x, pp.z - this.bobPos.z) > this.rod.cast + 14) { g.ui.toast('🎣', 'You walked too far — reeled in.'); this.reelBack(); }
+        if (Math.hypot(pp.x - this.bobPos.x, pp.z - this.bobPos.z) > this.rod.cast + 14) { g.ui.toast('rod:1', 'You walked too far — reeled in.'); this.reelBack(); }
         break;
       }
       case 'bite':
         this.biteT -= dt;
         this.bobPos.y = wy - 0.18 + Math.sin(this.biteT * 30) * 0.03;
         if (this.biteT <= 0) {
-          g.ui.toast('🐟', 'It got away… wait for the next bite.');
+          g.ui.toast('fish:bluegill', 'It got away… wait for the next bite.');
           this.state = 'waiting'; this.timer = this.biteTime(); this.nextNibble = 2;
         }
         break;
@@ -279,10 +279,10 @@ export class Fishing {
     const flatDist = Math.hypot(this.bobPos.x - p.x, this.bobPos.z - p.z);
     if (this.overT > 0.75) {
       g.audio.play('snap');
-      g.ui.toast('💥', `Snap! The line broke — the ${f.rarity === 'junk' ? 'junk' : 'fish'} got away.`);
+      g.ui.toast(null, `Snap! The line broke — the ${f.rarity === 'junk' ? 'junk' : 'fish'} got away.`);
       this.cancel();
     } else if (this.slackT > 3.5) {
-      g.ui.toast('🐟', 'Too much slack — it slipped the hook.');
+      g.ui.toast('fish:bluegill', 'Too much slack — it slipped the hook.');
       this.reelBack();
     } else if (this.dist < 1.6 || (g.terrain.frozen && this.dist < 1.6) || flatDist < 1.2) {
       this.state = 'caught'; this.caughtT = 1.4;

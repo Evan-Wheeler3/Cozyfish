@@ -164,9 +164,9 @@ export const BOAT_NEEDS = { plank: 12, rope: 3, nails: 10 };
 export const QUESTS = [
   { text: 'Gather 3 sticks', hint: 'Sticks lie around the pond and under trees. Press E to pick up.', done: g => g.count('stick') >= 3 || g.tools.rod > 0 },
   { text: 'Find some string', hint: 'Someone left an old campsite in the woods to the north. Check the crate.', done: g => g.count('string') >= 1 || g.tools.rod > 0 },
-  { text: 'Craft a Stick Rod', hint: 'Open your pack with TAB and craft it.', done: g => g.tools.rod > 0 },
-  { text: 'Dig up some bait', hint: 'Dig worms from dirt mounds — hold E.', done: g => g.count('worm') + g.count('lure') > 0 || g.stats.caught > 0 },
-  { text: 'Catch your first fish', hint: 'Select the rod (2), hold the mouse to charge a cast, wait for the bobber to dip, then click and hold to reel.', done: g => g.stats.caught > 0 },
+  { text: 'Craft a Stick Rod', hint: 'Open your journal (Tab, or the book button) and craft it on the Crafting page.', done: g => g.tools.rod > 0 },
+  { text: 'Dig up some bait', hint: 'Dig worms from dirt mounds: hold E (or the E button) on one.', done: g => g.count('worm') + g.count('lure') > 0 || g.stats.caught > 0 },
+  { text: 'Catch your first fish', hint: 'Hold Use to charge a cast. Wait for the bobber to plunge, then hold to reel — ease off when it pulls.', done: g => g.stats.caught > 0 },
   { text: "Sell a fish at Mabel's stand", hint: 'The market stand is just east of where you woke up.', done: g => g.stats.sold > 0 },
   { text: 'Craft a Stone Axe', hint: 'You need fiber — tall pale grass near the shore. Plus sticks and stones.', done: g => g.tools.axe > 0 },
   { text: 'Chop down a tree', hint: 'Equip the axe and swing at a trunk. Collect the logs.', done: g => g.stats.chopped > 0 },

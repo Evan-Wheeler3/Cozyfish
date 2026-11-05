@@ -11,28 +11,36 @@ spring, summer, fall or winter (ice fishing!).
 
 ## Play
 
-Serve the folder with any static file server and open `index.html`:
+**Online (GitHub Pages):** this repo is a static site with no build step, so GitHub Pages can host it as-is.
+In the repo's **Settings → Pages**, set *Source* to **Deploy from a branch**, pick the branch that has these files
+(e.g. `main` after merging) and the **/ (root)** folder. The game appears at
+`https://<your-user>.github.io/<repo>/` a minute later. (`.nojekyll` is included so Pages serves every file untouched.)
+
+**Locally:** serve the folder with any static file server and open `index.html`:
 
 ```sh
 python3 -m http.server 8000
 # → http://localhost:8000
 ```
 
-Desktop browser with a mouse and keyboard recommended.
+Works with mouse & keyboard or touch (phones and tablets, best in landscape).
 
-| Key | Action |
-|---|---|
-| **WASD** | Move (Shift to sprint) |
-| **Mouse** | Look (click the game to capture the mouse) |
-| **Space** | Jump · swim up |
-| **C** | Dive while swimming |
-| **E** | Interact / pick up (hold on dirt mounds to dig) |
-| **Left click** | Use held item — cast & reel, chop, throw |
-| **1–5 / wheel** | Hands · Rod · Axe · Stones · Lantern |
-| **Tab** | Pack & crafting |
-| **J** | Fish journal |
-| **F** | Toggle lantern |
-| **Esc** | Pause, settings, change season |
+| Keyboard & mouse | Touch | Action |
+|---|---|---|
+| **WASD**, Shift to sprint | Left thumb joystick (push far to run) | Walk |
+| **Mouse** (click the game to capture it) | Drag with right thumb | Look |
+| **Space** | ▲ button | Jump · swim up |
+| **C** | — | Dive while swimming |
+| **E** (hold on dirt mounds) | **E** button, or tap the thing | Pick up · talk · dig |
+| **Left click** (hold to charge a cast, hold to reel) | Big **Use** button | Cast & reel, chop, throw |
+| **1–5 / wheel** | Tap the hotbar | Hands · Rod · Axe · Stones · Lantern |
+| **J** / **Tab** | Book button | Field journal: tasks, pack, crafting, fish, map |
+| **F** | — | Toggle lantern |
+| **Esc** | **II** button | Menu: season, settings, save |
+
+The HUD stays out of the way: just your hotbar, plus meters that only appear when they matter (warmth, casting,
+line tension). New tasks are announced briefly; turn on *Pin current task* or *Show minimap* in the menu if you
+like them always visible.
 
 ## The loop
 
@@ -66,7 +74,8 @@ watch the ducks, and catch the golden hour — fish bite faster at dusk.
 | `src/boat.js`, `src/life.js` | Rowboat; ducks & jumping fish |
 | `src/sky.js`, `src/render.js` | Day/night sky, sun/moon, god rays, bloom, warm grade |
 | `src/mesher.js`, `src/models.js` | Voxel mesher with baked AO, pixel-grain shader, all the little models |
-| `src/particles.js`, `src/audio.js`, `src/ui.js` | Particles & weather, procedural sound & music, HUD & menus |
+| `src/particles.js`, `src/audio.js` | Particles & weather, procedural sound & music |
+| `src/ui.js`, `src/icons.js`, `src/touch.js` | HUD & field-journal menus, icons rendered from the voxel models, touch controls |
 
 `preview.html?season=fall&time=17.5&view=hill` renders still shots of the world (views: shore, aerial, woods, dock,
 low, sunset, hill, forest, forest2). `index.html?test` runs the game with a manually stepped clock for automated

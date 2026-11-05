@@ -48,11 +48,11 @@ export class Boat {
       p.boat = null;
       if (best) p.pos.set(best[0], best[1] + 0.01, best[2]);
       else p.pos.set(this.pos.x + Math.cos(this.heading) * 1.5, WATER_Y - 1, this.pos.z - Math.sin(this.heading) * 1.5);
-      g.ui.toast('🛶', 'You hop out of the boat.');
+      g.ui.toast('boat', 'You hop out of the boat.');
     } else {
-      if (g.terrain.frozen) { g.ui.toast('❄️', 'The boat is frozen into the ice until spring.'); return; }
+      if (g.terrain.frozen) { g.ui.toast('snowflake', 'The boat is frozen into the ice until spring.'); return; }
       p.boat = this;
-      g.ui.toast('🛶', 'W/S to row, A/D to turn. E to get out. You can fish from here!');
+      g.ui.toast('boat', g.touch ? 'Joystick to row. Tap E to get out. You can fish from here.' : 'W/S to row, A/D to turn, E to get out. You can fish from here.');
     }
   }
 
@@ -75,8 +75,11 @@ export class Boat {
     let thrust = 0, turn = 0;
     if (driving && !frozen) {
       const k = input.keys;
-      thrust = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 0.6 : 0);
-      turn = (k.has('KeyA') ? 1 : 0) - (k.has('KeyD') ? 1 : 0);
+      const ax = input.axis || { x: 0, y: 0 };
+      thrust = Math.max(-0.6, Math.min(1, (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 0.6 : 0) + ax.y));
+      turn = Math.max(-1, Math.min(1, (k.has('KeyA') ? 1 : 0) - (k.has('KeyD') ? 1 : 0) - ax.x));
+      if (Math.abs(thrust) < 0.15) thrust = 0;
+      if (Math.abs(turn) < 0.15) turn = 0;
     }
     const fwd = new THREE.Vector2(-Math.sin(this.heading), -Math.cos(this.heading));
     this.vel.addScaledVector(fwd, thrust * 3.2 * dt);

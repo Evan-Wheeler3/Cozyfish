@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2a1a0e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Cozyfish</title>
 <meta name="description" content="A cozy voxel fishing game in the deep woods.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Patrick+Hand&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
 </head>
@@ -17,51 +20,53 @@
 <!-- Title -->
 <div id="title" class="screen">
   <div class="title-card">
-    <div class="logo">Cozy<span>fish</span></div>
+    <h1 class="logo">Cozy<span>fish</span></h1>
     <div class="tag">a little pond in the deep woods</div>
     <div class="seasons" id="season-cards"></div>
     <div class="title-buttons">
       <button class="btn big" id="btn-new">New game</button>
-      <button class="btn big ghost hidden" id="btn-continue">Continue</button>
+      <button class="btn big alt hidden" id="btn-continue">Continue</button>
     </div>
-    <div class="controls-hint">
-      <span><b>WASD</b> move</span><span><b>Mouse</b> look</span><span><b>Shift</b> sprint</span><span><b>Space</b> jump / swim</span>
-      <span><b>E</b> interact</span><span><b>Click</b> use item</span><span><b>1–5</b> tools</span><span><b>Tab</b> pack &amp; crafting</span><span><b>J</b> journal</span><span><b>F</b> lantern</span>
-    </div>
+    <div class="controls-hint" id="controls-hint"></div>
   </div>
   <div class="loading" id="loading">Growing the woods…</div>
 </div>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
-  <div id="topleft">
-    <div class="pill" id="clock">Day 1 · 7:00</div>
-    <div class="pill" id="coins">🪙 0</div>
-    <div class="pill warmth" id="warmth"><span>🔥</span><div class="bar"><i></i></div></div>
-  </div>
-  <div id="goal"><div class="goal-label">Goal</div><div id="goal-text"></div><div id="goal-hint"></div></div>
-  <div id="mapwrap"><canvas id="minimap" width="300" height="300"></canvas><div class="compass">N</div></div>
+  <div id="banner"></div>
+  <div id="pinned" class="note hidden"></div>
+  <div id="mapwrap" class="hidden"><canvas id="minimap" width="300" height="300"></canvas></div>
   <div id="crosshair"></div>
-  <div id="prompt" class="hidden"><span class="key">E</span><span id="prompt-text"></span><div id="hold"><i></i></div></div>
+  <div id="prompt" class="hidden"><span class="key" id="prompt-key">E</span><span id="prompt-text"></span><div id="hold"><i></i></div></div>
   <div id="fishui" class="hidden">
-    <div id="power" class="hidden"><div class="label">Cast power</div><div class="bar"><i></i></div></div>
+    <div id="power" class="meter hidden"><div class="mlabel">Cast</div><div class="bar"><i></i></div></div>
     <div id="bite" class="hidden">!</div>
     <div id="tension" class="hidden">
-      <div class="label">Tension <span>— hold to reel, ease off when it pulls</span></div>
+      <div class="mlabel">Line tension</div>
       <div class="bar tbar"><div class="zone"></div><i></i></div>
-      <div class="label small">Reeled in</div>
       <div class="bar pbar"><i></i></div>
     </div>
   </div>
-  <div id="hotbar"></div>
-  <div id="baitinfo"></div>
+  <div id="bottom">
+    <div id="vitals" class="hidden"><span id="warm-ico"></span><div class="pips" id="warm-pips"></div></div>
+    <div id="hotbar"></div>
+  </div>
   <div id="toasts"></div>
+  <div id="touch" class="hidden">
+    <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>
+    <div id="look-zone"></div>
+    <button class="tbtn" id="t-use" aria-label="Use item"></button>
+    <button class="tbtn" id="t-act" aria-label="Interact">E</button>
+    <button class="tbtn" id="t-jump" aria-label="Jump">▲</button>
+    <div id="t-top"><button class="tbtn small" id="t-book" aria-label="Journal"></button><button class="tbtn small" id="t-menu" aria-label="Menu">II</button></div>
+  </div>
 </div>
 
-<div id="panel" class="hidden"><div class="panel-inner" id="panel-inner"></div></div>
+<div id="panel" class="hidden"><div class="book" id="panel-inner"></div></div>
 <div id="catch" class="hidden"></div>
-<div id="pause" class="hidden"><div class="panel-inner" id="pause-inner"></div></div>
-<div id="resume" class="hidden">Click to keep playing</div>
+<div id="pause" class="hidden"><div class="book" id="pause-inner"></div></div>
+<div id="resume" class="hidden">Click to look around</div>
 <div id="underwater"></div>
 <div id="frost"></div>
 <div id="fade"></div>
